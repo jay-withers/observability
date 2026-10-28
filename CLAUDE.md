@@ -64,9 +64,15 @@ state.
   assumption is what broke.
 - **New GHCR packages start private.** Flip `observability/grafana` to public
   once after the first push; the app has no pull secret.
-- **`GF_SERVER_ROOT_URL` is computed** from the app's name and the
-  environment's default domain, because the app's FQDN is not known until it
+- **`GF_SERVER_ROOT_URL` is computed**: the custom domain when
+  `custom_domain_name` is set, otherwise the app's name under the
+  environment's default domain, because the FQDN is not known until the app
   exists and Grafana needs it for every link and redirect.
+- **The custom domain is a local apply plus `make bind-domain`.** The managed
+  certificate is a child of the shared environment in `rg-platform-dev`,
+  where cd-terraform's identity cannot write, and the provider cannot finish
+  the bind (#27362). `certificate_binding_type` is under `ignore_changes`, or
+  every plan would propose unbinding it. Cloudflare records must be DNS only.
 - **Only the image is under `ignore_changes`.** Env is managed by Terraform:
   nothing in it changes per release.
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files

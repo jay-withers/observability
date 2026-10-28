@@ -115,3 +115,50 @@ resource "azurerm_container_app" "this" {
   # workspace, rather than erroring until the role assignment lands.
   depends_on = [azurerm_role_assignment.workspace_reader]
 }
+
+# --- the custom domain --------------------------------------------------------
+#
+# The same shape as finances, gym-log and career, which hit and confirmed the
+# provider's gaps first. Both resources are guarded by the same count: a
+# hostname binds to exactly one container app globally.
+#
+# **The certificate lands in the *platform's* resource group**, as a child of
+# the environment, so cd-terraform's identity (Contributor on this project's
+# group only) cannot create it: an apply that adds or replaces it is local.
+#
+# **Both DNS records must resolve before apply.** Azure validates them during
+# issuance, not after. `make dns` prints them.
+resource "azurerm_container_app_environment_managed_certificate" "this" {
+  count = var.custom_domain_name != "" ? 1 : 0
+
+  name                         = replace(var.custom_domain_name, ".", "-")
+  container_app_environment_id = data.azurerm_container_app_environment.platform.id
+  subject_name                 = var.custom_domain_name
+  domain_control_validation    = "CNAME"
+
+  # Azure requires the hostname to already be registered on an app in the
+  # environment before it will issue the managed certificate.
+  depends_on = [azurerm_container_app_custom_domain.this]
+}
+
+resource "azurerm_container_app_custom_domain" "this" {
+  count = var.custom_domain_name != "" ? 1 : 0
+
+  name                     = var.custom_domain_name
+  container_app_id         = azurerm_container_app.this.id
+  certificate_binding_type = "Disabled"
+
+  # container_app_environment_certificate_id is deliberately unset: passing a
+  # *managed* certificate's id 400s the plan
+  # (hashicorp/terraform-provider-azurerm#25788).
+  #
+  # **The apply cannot finish the bind, and says nothing about it.** ARM's bind
+  # needs the certificate id and the provider has no field for it
+  # (hashicorp/terraform-provider-azurerm#27362, open), so `make bind-domain`
+  # is the manual step after any apply that recreates either resource. The bind
+  # leaves the domain at `SniEnabled`; ignoring both arguments stops every plan
+  # from proposing to replace it back to `Disabled`, which would unbind it.
+  lifecycle {
+    ignore_changes = [certificate_binding_type, container_app_environment_certificate_id]
+  }
+}

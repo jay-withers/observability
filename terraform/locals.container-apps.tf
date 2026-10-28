@@ -27,8 +27,11 @@ locals {
 
   # Known before the app exists: an app's ingress FQDN is its name under the
   # environment's default domain. Grafana builds every link and redirect from
-  # its root URL, so it has to be the real one.
-  public_url = "https://${module.naming.container_app.name}.${data.azurerm_container_app_environment.platform.default_domain}"
+  # its root URL, so it has to be the one people use: the custom domain when
+  # one is set. The default URL keeps working either way, and the smoke test
+  # uses it, so a deploy never depends on the certificate being bound.
+  default_url = "https://${module.naming.container_app.name}.${data.azurerm_container_app_environment.platform.default_domain}"
+  public_url  = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : local.default_url
 
   # Everything Grafana needs that is not a secret. Its provisioning files
   # (grafana/provisioning) read the AZURE_* and WORKSPACE_* values, so the

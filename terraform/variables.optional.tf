@@ -34,3 +34,19 @@ variable "platform_workspace_name" {
   type        = string
   default     = "log-platform-dev"
 }
+
+# --- the custom domain --------------------------------------------------------
+
+variable "custom_domain_name" {
+  description = "Hostname to bind to Grafana with a free Azure-managed certificate, e.g. `observability.jaywithers.uk`. Empty creates neither the certificate nor the binding, and Grafana's root URL stays the default `*.azurecontainerapps.io` one. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them."
+  type        = string
+  default     = ""
+
+  validation {
+    # An apex domain cannot be a CNAME, and CNAME is the only validation method
+    # these resources use. Caught here rather than as an opaque DNS failure
+    # midway through certificate issuance.
+    condition     = var.custom_domain_name == "" || length(split(".", var.custom_domain_name)) > 2
+    error_message = "custom_domain_name must be a subdomain, not an apex domain: validation is by CNAME, which an apex record cannot hold."
+  }
+}

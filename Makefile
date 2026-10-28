@@ -9,7 +9,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url admin-password db-role
+.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password db-role
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -87,6 +87,31 @@ smoke: ## Check IMAGE_TAG is live and Grafana reaches its database (IMAGE_TAG re
 url: ## Print Grafana's URL
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
 	@terraform -chdir=$(TF_DIR) output -raw grafana_url; echo
+
+dns: ## Print the DNS records the custom domain needs
+	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
+	@host="$$(terraform -chdir=$(TF_DIR) output -raw custom_domain_name)"; \
+		if [ -z "$$host" ]; then echo "no custom_domain_name set; nothing to do"; exit 0; fi; \
+		label="$${host%%.*}"; \
+		echo "CNAME  $$label  ->  $$(terraform -chdir=$(TF_DIR) output -raw default_url | sed 's|^https://||')"; \
+		echo "TXT    asuid.$$label  ->  $$(terraform -chdir=$(TF_DIR) output -raw custom_domain_verification_id)"
+
+# The apply cannot finish the binding itself: ARM needs the managed
+# certificate's id in the bind request and the provider has no field to put it
+# in (hashicorp/terraform-provider-azurerm#27362, open). Run this after any
+# apply that created or recreated the custom domain or the certificate. A plan
+# afterwards reports no diff.
+bind-domain: ## Finish binding the managed certificate (manual, see #27362)
+	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
+	@host="$$(terraform -chdir=$(TF_DIR) output -raw custom_domain_name)"; \
+		if [ -z "$$host" ]; then echo "no custom_domain_name set; nothing to do"; exit 0; fi; \
+		app="$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)"; \
+		rg="$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)"; \
+		env_id="$$(az containerapp show --name "$$app" --resource-group "$$rg" --query properties.environmentId -o tsv)"; \
+		cert_id="$$(az containerapp env certificate list --ids "$$env_id" --managed-certificates-only \
+			--query "[?properties.subjectName=='$$host'].id | [0]" -o tsv)"; \
+		az containerapp hostname bind --name "$$app" --resource-group "$$rg" \
+			--hostname "$$host" --certificate "$$cert_id" --environment "$$env_id"
 
 admin-password: ## Print the password of Grafana's admin user
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null

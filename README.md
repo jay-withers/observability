@@ -63,6 +63,22 @@ In order, once:
    to replace the placeholder with Grafana.
 7. **`make url`**, sign in, open *Platform → Deployments*.
 
+## The custom domain
+
+Grafana is served at `observability.jaywithers.uk` (`custom_domain_name` in
+`environments/dev.tfvars`) with a free Azure-managed certificate, the same
+way finances, gym-log and career are. `make dns` prints the CNAME and
+`asuid` TXT records; on Cloudflare they are **DNS only**, never proxied, or
+certificate validation fails. Both must resolve before the apply.
+
+Adding or changing the domain is a **local** `make apply`, then
+`make bind-domain`: the certificate is created in the platform's resource
+group, which cd-terraform's identity cannot write to, and the provider cannot
+finish the bind itself (hashicorp/terraform-provider-azurerm#27362). Grafana's
+root URL moves to the domain in the same apply, so its links point there.
+The default `*.azurecontainerapps.io` URL keeps working, and the smoke test
+uses it.
+
 ## Commands
 
 ```bash
@@ -75,6 +91,8 @@ make build            # build the Grafana image for linux/amd64
 make deploy IMAGE_TAG=vX.Y.Z
 make smoke IMAGE_TAG=vX.Y.Z
 make url              # Grafana's URL
+make dns              # the DNS records the custom domain needs
+make bind-domain      # finish binding the managed certificate after an apply
 make admin-password   # the admin password
 make db-role          # create or re-password Grafana's database role
 ```
