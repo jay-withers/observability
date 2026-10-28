@@ -48,16 +48,20 @@ In order, once:
    packages start private whatever the repository's visibility, and the
    container app has no pull secret.
 4. **`make apply` locally** (as yourself, `az login` first). It creates the
-   resource group and the workspace role assignment, which the pipeline
-   identity cannot.
+   workspace role assignment, which is outside this project's resource group
+   and so beyond the pipeline identity. The group itself comes from
+   github-repos (`create_resource_groups`, step 6), which must be applied
+   first.
 5. **`make db-role`.** Creates Grafana's `grafana` role on the shared server,
    with the password from this state, and gives it the `grafana` database.
    It needs `psql` and briefly opens a firewall rule for your public IP,
    because the server only admits Azure IPs. Grafana reports unhealthy until
    this has run.
 6. **github-repos**: add `deploy_resource_groups = ["rg-observability-dev"]`,
-   the `cae-platform-dev` join and `send_events = true` to this repo's
-   `state_consumers` entry, and `make apply` there. From then on cd-terraform
+   `create_resource_groups = true`, the `cae-platform-dev` join and
+   `send_events = true` to this repo's `state_consumers` entry, and
+   `make apply` there. (It was done in this order the first time, with a
+   local apply creating the group; on a rebuild, do this before step 4.) From then on cd-terraform
    applies, cd-publish deploys, and every deploy is recorded like any app's.
    Re-run the failed deploy from step 2 (or `make deploy IMAGE_TAG=<release>`)
    to replace the placeholder with Grafana.

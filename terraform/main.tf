@@ -11,10 +11,13 @@ module "naming" {
   suffix  = [var.project_name, var.environment]
 }
 
-resource "azurerm_resource_group" "this" {
-  name = module.naming.resource_group.name
-  # Must match the shared environment's region: a container app may sit in a
-  # different resource group from its environment, but not a different region.
-  location = data.azurerm_container_app_environment.platform.location
-  tags     = local.tags
+# The resource group is github-repos' (`create_resource_groups`), which
+# imported the one this config's first apply made. Dropped from this state
+# without touching Azure; data.tf looks it up by the same name.
+removed {
+  from = azurerm_resource_group.this
+
+  lifecycle {
+    destroy = false
+  }
 }

@@ -13,5 +13,12 @@ data "azurerm_log_analytics_workspace" "platform" {
   resource_group_name = var.platform_resource_group_name
 }
 
+# This project's resource group, created by github-repos along with the
+# pipeline identity's grants on it. Same name the naming module always gave
+# it; github-repos puts it in the shared environment's region.
+data "azurerm_resource_group" "this" {
+  name = module.naming.resource_group.name
+}
+
 # For the subscription the Azure Monitor data source queries.
 data "azurerm_subscription" "current" {}

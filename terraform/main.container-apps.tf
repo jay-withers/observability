@@ -3,7 +3,7 @@
 resource "azurerm_container_app" "this" {
   name                         = module.naming.container_app.name
   container_app_environment_id = data.azurerm_container_app_environment.platform.id
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = data.azurerm_resource_group.this.name
   revision_mode                = "Single"
 
   # The shared environment is Consumption-only; stated so a plan doesn't
