@@ -49,10 +49,13 @@ state.
 
 ## Traps
 
-- **The first apply is local.** It creates the resource group and the
-  `Log Analytics Reader` role assignment, which cd-terraform's identity
-  cannot. The deploy identity only gets Contributor on `rg-observability-dev`
-  once github-repos adds it, after this group exists.
+- **The resource group is github-repos'.** It creates `rg-observability-dev`
+  (`create_resource_groups`) and grants the pipeline identity Contributor and
+  conditioned RBAC Administrator on it, so role assignments *inside* the group
+  apply in CD. This config reads it by data source; a `removed` block dropped
+  the original from state. The `Log Analytics Reader` assignment on the
+  platform's workspace is outside the group, so changing it is still a local
+  apply.
 - **`postgres_fqdn` is copied, not derived.** The shared server's name has a
   random suffix (it is a global DNS label). Take it from azure-container-apps'
   `make outputs`.
