@@ -37,8 +37,9 @@ In order, once:
 
 1. **github-repos** already lists this repo as a state consumer, so the OIDC
    identity and the `dev` environment's `AZURE_*` variables exist.
-2. **Merge the first pull request.** `cd-tag` releases `v0.0.1` and publishes
-   `ghcr.io/jay-withers/observability/grafana:v0.0.1`. Its deploy job fails,
+2. **Merge the first pull request.** `cd-tag` released `v0.1.0` and published
+   `ghcr.io/jay-withers/observability/grafana:v0.1.0`, the tag the first
+   apply seeds the app with. Its deploy job fails,
    because the app does not exist yet: expected, and it closes on the next
    successful deploy.
 3. **Make the package public**: GitHub → your packages →

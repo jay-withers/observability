@@ -46,9 +46,10 @@ variable "image_tag" {
   description = "Image tag seeding the app's **first** revision only. Every deploy after that is `make deploy IMAGE_TAG=vX.Y.Z`, because the container's image sits under `ignore_changes`."
   type        = string
   # Must name a tag that exists in the registry, or the first revision fails
-  # on the image pull long after apply reports success. cd-tag's first release
-  # on a repo with no tags is v0.0.1.
-  default = "v0.0.1"
+  # on the image pull long after apply reports success. v0.1.0 is the first
+  # release with an image: v0.0.1 was tagged when the repo was created from
+  # its template, before anything here built one.
+  default = "v0.1.0"
 
   validation {
     # A moving tag deploys nothing: Container Apps creates a revision only when
