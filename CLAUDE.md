@@ -4,137 +4,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo does
 
-A GitHub repository template for Azure Terraform modules. It provides a dev container,
-Terraform-aware pre-commit hooks, CI workflows (linting + `terraform plan`,
-auto-tagging), Renovate dependency updates, and Makefile scaffolding.
+Grafana for the jay-withers Container Apps estate: a scale-to-zero container
+app on the shared environment, reading the shared Log Analytics workspace.
+Phase 1 of the observability plan ships the Deployments dashboard over
+`Deployments_CL`. `README.md` covers the why and the first-time setup; this
+file covers the traps.
 
-## Dev container
+A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
+shaped like gym-log: its own resource group and identity, the environment,
+workspace and Postgres server resolved by name or passed in, never by remote
+state.
 
-The repo is built around the dev container at `.devcontainer/devcontainer.json`,
-which uses the image `ghcr.io/jay-withers/dev-container/terraform`. It provides
-Terraform, TFLint, terraform-docs, and Checkov, and runs `make install` on
-creation. Prefer working inside the container so tool versions match CI.
+## Decisions not to re-litigate
+
+- **Dashboards and the data source ship inside the image** (`grafana/`), not
+  through the Grafana Terraform provider. That provider must reach a running
+  Grafana at plan time, and this one is created by the same apply and scales
+  to zero. Provisioned dashboards are read-only in the UI on purpose.
+- **`__WORKSPACE_RESOURCE_ID__` in dashboard JSON** is filled in by
+  `grafana/entrypoint.sh` at start-up. Grafana substitutes environment
+  variables in provisioning YAML but not in dashboard JSON. Never commit a
+  real workspace ID into a dashboard.
+- **Two passwords, both container app secrets from `random_password`**, never
+  Key Vault secrets: a Terraform-managed vault secret needs data-plane access
+  just to plan, which the pipeline identity lacks (the estate's documented
+  trap). No Key Vault exists here at all.
+- **Grafana's database login is a password** because Grafana cannot use an
+  Entra token for its own database. It is the only password-holding role on
+  the shared server. `sql/grafana-role.sql` creates it; `make db-role` runs
+  it as the Entra administrator.
+- **One local admin, no Entra SSO** (no app registration). Sign-up and
+  anonymous access are off.
+- **Scale to zero.** Grafana is opened a few times a week. Alerting lives in
+  Azure Monitor, so nothing depends on it being awake.
+- **Its own smoke test** (`scripts/smoke.sh`), not the app repos' shared one,
+  which needs a `/healthz` reporting the release tag. This one checks the
+  configured image, that the latest revision is the ready one, and that
+  `/api/health` reports `"database": "ok"`.
+
+## Traps
+
+- **The first apply is local.** It creates the resource group and the
+  `Log Analytics Reader` role assignment, which cd-terraform's identity
+  cannot. The deploy identity only gets Contributor on `rg-observability-dev`
+  once github-repos adds it, after this group exists.
+- **`postgres_fqdn` is copied, not derived.** The shared server's name has a
+  random suffix (it is a global DNS label). Take it from azure-container-apps'
+  `make outputs`.
+- **`make db-role` needs a firewall hole.** The server admits Azure IPs only
+  (`AllowAllAzureIps`); the target opens a rule for your public IP and removes
+  it on exit. Its SQL assumes the Entra administrator can act for the
+  database's owner, which held on a local Postgres 17 where the owner was a
+  role it belonged to. If `ALTER DATABASE` is refused on Azure, that
+  assumption is what broke.
+- **New GHCR packages start private.** Flip `observability/grafana` to public
+  once after the first push; the app has no pull secret.
+- **`GF_SERVER_ROOT_URL` is computed** from the app's name and the
+  environment's default domain, because the app's FQDN is not known until it
+  exists and Grafana needs it for every link and redirect.
+- **Only the image is under `ignore_changes`.** Env is managed by Terraform:
+  nothing in it changes per release.
+- **`pre-commit run --all-files` skips untracked files.** `git add` new files
+  before `make lint`, or terraform-docs, tflint and checkov never see them.
 
 ## Terraform layout
 
-The module lives in `terraform/` (`versions.tf`, `main.tf`, `locals.tf`,
-`variables.tf`, `outputs.tf`); its tests are in `terraform/tests/*.tftest.hcl`.
-`terraform/examples/basic/` is a consumer of the module and is what
-`ci-terraform` (and `make plan`) plan against — the module itself has no
-provider block (modules shouldn't configure providers) so it can't be planned
-on its own; `fmt`/`validate`/`test` still run directly against `terraform/` via
-`terraform -chdir=terraform`. The `README.md` in `terraform/` and
-`terraform/examples/basic/` is generated by terraform-docs between the
-`BEGIN_TF_DOCS` / `END_TF_DOCS` markers — do not hand-edit those blocks. The
-Terraform version is pinned in `.terraform-version` at the repo root (tfenv/tenv
-and CI read it; it must stay at root so tfenv/tenv can discover it).
-
-**File layout is enforced, not just conventional**:
-`locals`/`variable`/`output`/`data` blocks must live in a matching
-`locals.tf`/`variables.tf`/`outputs.tf`/`data.tf`, and `terraform{}`/`provider{}`
-blocks in `versions.tf`, or a topic-scoped variant of any of them (e.g.
-`outputs.network.tf`, `data.state.tf`), via the local pre-commit hook
-`scripts/check-tf-standards.sh`. TFLint's `terraform_standard_module_structure`
-rule covers similar ground but hardcodes the exact filenames `variables.tf`/
-`outputs.tf` with no topic-scoped support and no locals/data/versions coverage
-at all — it's deliberately left disabled in `terraform/.tflint.hcl` in favor of
-the custom script. This repo is the canonical home of that script: `terraform-root-aks`,
-`azure-landingzone` and `github-repos` carry verbatim copies, so a change here
-should be re-copied there rather than diverging. It applies to every root config
-in the repo, including `terraform/examples/basic/` — hence its
-`variables.tf`/`outputs.tf`/`versions.tf` even though the example itself is tiny
-(its `provider "azurerm"` block lives in `versions.tf`, not `main.tf`). When
-adding a new root config or growing the module, put new
-`variable`/`output`/`locals`/`data` blocks in the right file from the start
-rather than relying on a later cleanup pass.
-
-The module creates one resource, `azurerm_resource_group.this`, named via the
-`Azure/naming/azurerm` module (suffixed with `var.environment`) — replace/add
-to this as the module grows. Inputs: a required `environment`
-(`terraform/variables.tf`, validated to `dev`/`stg`/`prd`), `location`
-(defaults to `westeurope`), and `tags`. `tags` is merged with
-`local.default_tags` (`terraform/locals.tf`) — `environment` and
-`managed-by = "terraform"` — with caller-supplied `tags` taking precedence on
-key conflicts. Because there's now a real resource, both `make plan` and the
-`ci-terraform` plan job need real Azure credentials — `terraform test`
-(mocked provider) is the only credential-free check. `terraform/.tflint.hcl`
-runs both the generic `terraform` ruleset and the `azurerm` ruleset
-(`terraform-linters/tflint-ruleset-azurerm`) for azurerm-specific rules. That
-plugin's `version = "..."` pin has its own Renovate regex manager in
-`renovate.json` (scoped to `.tflint.hcl`) since it's not a GitHub Action, pip
-package, or download URL any of the shared presets already cover.
-
-`renovate.json` extends the shared presets from
-[`jay-withers/renovate`](https://github.com/jay-withers/renovate)
-(`github>jay-withers/renovate`) rather than configuring Renovate
-inline — that one line pulls in `config:recommended`, semantic commits,
-automerge/schedule policy, and per-ecosystem grouping (docker, github-actions,
-terraform, npm, pre-commit). Only what's genuinely specific to this repo
-stays local: `autoApprove` (needed so Renovate's own PRs clear the
-branch-protection review requirement) and the two `regexManagers` above
-(`.terraform-version`, `.tflint.hcl`'s azurerm plugin pin) — neither is a
-GitHub Action, npm/pip package, or Docker image any shared preset's manager
-already covers. Change ecosystem-wide policy (grouping, schedule, automerge)
-in `renovate` itself so every consuming repo picks it up; only touch
-this file for something unique to this module.
-
-Azure-side deletion protection (`prevent_deletion_if_contains_resources`) is a
-provider `features` block setting, not a resource attribute, so it can't live
-in the module (modules shouldn't configure providers) — it's set explicitly in
-`terraform/examples/basic/main.tf`'s provider block instead. It already
-defaults to `true` in the `azurerm` provider; document the same expectation
-for real consumers of this module rather than trying to enforce it from
-inside `terraform/main.tf`.
-
-`terraform/environments/{dev,stg,prd}.tfvars` hold the `-var-file` inputs for
-root configs like `terraform/examples/basic/`, selected with a path relative
-to that config's directory (e.g. `-var-file=../../environments/dev.tfvars`;
-`make plan ENV=<dev|stg|prd>` does this for you). These tfvars files are
-intentionally committed — `.gitignore` no longer excludes `*.tfvars`; don't put
-secrets in them (`gitleaks` scans as a backstop).
-
-Tests mock the `azurerm` provider (`mock_provider`), so `make test` and the
-`ci-terraform` test job run without Azure credentials. The
-`plan_with_defaults` test run uses `command = apply` (still against the mocked
-provider, so no real Azure calls) because the resource group's name depends on
-the naming module's random suffix, which isn't known until after apply.
-
-## Commands
-
-`make` with no target prints the self-documenting help (the default goal).
-
-```bash
-make install           # install pre-commit hooks (run once after cloning)
-make lint              # run all pre-commit hooks against every file
-make fmt               # terraform fmt -recursive
-make validate          # terraform init + validate
-make plan              # terraform init + plan the basic example (set ENV=dev|stg|prd, default dev)
-make test              # terraform test (mocked azurerm provider — no Azure auth)
-```
-
-## Commit messages
-
-Commits must follow [Conventional Commits](https://www.conventionalcommits.org/) — enforced by commitlint at commit-msg time. Examples: `feat: add tflint`, `fix: correct resource group name`, `chore: bump azurerm provider`.
-
-## Pre-commit config
-
-Hooks are in `.pre-commit-config.yaml` at the repo root. The `no-commit-to-branch` hook blocks direct commits to `main`. `terraform_fmt`/`terraform_validate`/`terraform_docs` come from `antonbabenko/pre-commit-terraform`. TFLint and Checkov are run by local hooks instead of that repo's `terraform_tflint`/`terraform_checkov`: `scripts/tflint-per-env.sh` and `scripts/checkov-per-env.sh` each glob `terraform/environments/*.tfvars` and run their tool once per environment with `--var-file`, so rules that depend on concrete variable values (naming, tags, region-specific checks) are evaluated against what each environment actually deploys — dropping a new environment's tfvars in `terraform/environments/` picks it up automatically, no config change needed. `tflint-per-env.sh` also discovers every directory under `terraform/` containing `.tf` files (not just the module root) since tflint, unlike checkov, doesn't recurse — both scripts prune hidden directories (via `-name '.?*'`, not `-name .terraform` specifically) so any future tool cache directory is excluded too without code changes; don't switch that to `-name '.*'` — it also matches the find root `.` itself and silently prunes everything. `checkov-per-env.sh` deliberately does **not** pass `--download-external-modules` — it was tried (to scan resources created by registry modules like `Azure/naming/azurerm`), but cost ~15s per invocation regardless of caching (checkov's own graph-building overhead, not network time) for zero benefit here, since that module has no resources of its own. Checkov logs a harmless "Failed to download module" warning as a result. The other local hook, `check-tf-standards` (`scripts/check-tf-standards.sh`), enforces the file-layout standards described above.
+`terraform/` is a deployable root configuration with a partial `azurerm`
+backend (`backends/dev.hcl`). File layout is enforced by
+`scripts/check-tf-standards.sh` (shared verbatim with the other Terraform
+repos): `locals`/`variable`/`output`/`data` blocks in matching files or
+topic-scoped variants. Required inputs live in `variables.required.tf`.
+`.terraform.lock.hcl` carries hashes for linux_amd64, linux_arm64 and
+darwin_arm64. Only dev exists.
 
 ## CI
 
-Workflows are prefixed `ci-` (pull-request checks) or `cd-` (post-merge delivery):
+Every workflow is a thin caller of
+[`jay-withers/workflows`](https://github.com/jay-withers/workflows), pinned by
+SHA with the tag as a comment, the same set gym-log uses:
 
-- **ci-pre-commit**: runs all linters on PRs to `main` via the `pre-commit` job, which calls the reusable workflow `jay-withers/template-pipelines/.github/workflows/pre-commit.yml` (pinned by commit SHA, with the tag as a comment) rather than inlining the steps — because it's a reusable-workflow call, the status check context it reports on a PR is `pre-commit / Pre-commit` (`<caller job id> / <reusable job name>`), not the bare `pre-commit` job id
-- **ci-terraform**: a `changes` job (dorny/paths-filter) gates a `test` job (`terraform test`, mocked provider) and a `plan` job (`terraform plan` on `terraform/examples/basic/` via Azure OIDC, matrixed over `environment: [dev, stg, prd]` against `../../environments/<env>.tfvars`) so they run only when a PR touches Terraform. The plan job is additionally gated on `if: vars.AZURE_CLIENT_ID != ''`, so it stays skipped until the `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID` repository variables are set — all three matrix legs currently share that one subscription. The `ci-terraform` gate job always runs and is the check to require in branch protection — path filtering is at the job level (not the workflow trigger) precisely so the required check always reports.
-- **cd-tag**: auto-creates a semver tag on every merge to `main` (default bump: patch)
-- **cd-terraform**: plans dev on merges touching Terraform via the shared `terraform-deploy.yml`, and applies only on a manual run (Actions → Run workflow); a plan with changes opens a `terraform-pending` issue. Dormant here: a `ready` job skips it until `terraform/backends/dev.hcl` exists, so the template (and a fresh repo made from it) never runs a deploy. The workflow's header comment lists the steps to switch it on (github-repos `state_consumers` identity, backend file, first local apply).
+- `ci-pre-commit` (`pre-commit / Pre-commit`), `ci-codeql`.
+- `ci-terraform`: validate (`terraform / Terraform`), and a dev plan behind the
+  always-reporting `terraform-plan` gate. The plan fails until the identity has
+  Reader, i.e. until github-repos gives this repo `deploy_resource_groups`.
+- `ci-container-build`: builds `grafana/` behind the `container-build` gate.
+- `cd-tag` → `cd-publish` (when `grafana/` changed) → `container-apps-deploy`.
+- `cd-terraform`: plans dev on merge; applies when run by hand.
 
-## GitHub repo settings
+Required checks are set in github-repos. Only `pre-commit / Pre-commit` and
+`terraform / Terraform` are required until the rest report reliably.
 
-Branch protection and other repo-level GitHub settings aren't templated as
-files here. This template's own repo is managed centrally by
-[jay-withers/github-repos](https://github.com/jay-withers/github-repos)'s
-Terraform root module, which is the single source of truth for every
-jay-withers repo. A brand-new repo created from this template starts out with
-GitHub's defaults and picks up the same managed settings once it's added to
-that module's `var.repos` and applied.
+## Commit messages
+
+Conventional Commits, enforced by commitlint. `no-commit-to-branch` blocks
+direct commits to `main`.

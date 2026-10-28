@@ -1,0 +1,16 @@
+# The one data source: Azure Monitor, authenticated as the container app's
+# managed identity (GF_AZURE_MANAGED_IDENTITY_* in the Terraform). Grafana
+# substitutes the ${...} values from the environment at start-up, so the
+# subscription is never committed.
+apiVersion: 1
+
+datasources:
+  - name: Azure Monitor
+    uid: azure-monitor
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    isDefault: true
+    editable: false
+    jsonData:
+      azureAuthType: msi
+      subscriptionId: ${AZURE_SUBSCRIPTION_ID}
