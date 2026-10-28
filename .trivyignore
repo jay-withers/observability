@@ -1,0 +1,9 @@
+# Accepted image risks, read by jay-withers/workflows' docker.yml. Each entry
+# says why it does not apply here and expires, so it is looked at again.
+
+# go-jose: denial of service when parsing a JWK set containing RSA keys.
+# Compiled into Grafana's own binary (13.2.5 ships v4.1.4; fixed in 4.1.6),
+# so only a Grafana release can fix it. Grafana parses JWKs only for JWT and
+# OAuth sign-in, and both are off here: one local admin, no SSO. Drop this
+# entry once a Grafana release bumps go-jose.
+CVE-2026-116587 exp:2026-12-31

@@ -13,6 +13,16 @@ FROM grafana/grafana:13.2.5@sha256:9f7aa1e1e3246aade5792d35a738049f7f32f89cd51d1
 # publishing workflow's GITHUB_TOKEN write access to it.
 LABEL org.opencontainers.image.source="https://github.com/jay-withers/observability"
 
+# Only the Azure Monitor data source is used, and it is built into Grafana's
+# own binary. The bundled data source plugins (Postgres, MySQL, Loki, Tempo,
+# InfluxDB and the rest) are separate Go binaries that Grafana patches on its
+# own schedule, and they carried every fixable HIGH finding Trivy reported on
+# 13.2.5 but one. Removing them removes the findings and the attack surface.
+# Prometheus stays: it had no findings, and without it Grafana's Prometheus
+# migration services log an error on every start.
+USER 0
+RUN find /usr/share/grafana/data/plugins-bundled -mindepth 1 -maxdepth 1 ! -name prometheus -exec rm -rf {} +
+
 COPY provisioning/ /etc/grafana/provisioning/
 # Templates, not what Grafana reads: entrypoint.sh renders them into
 # /var/lib/grafana/dashboards with this deployment's workspace at start-up.
