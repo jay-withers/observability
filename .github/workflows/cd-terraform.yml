@@ -1,0 +1,68 @@
+name: cd-terraform
+
+# Plans dev on every merge to main that touches Terraform, through the shared
+# terraform-deploy.yml, and applies only when run by hand (Actions -> Run
+# workflow). A merge whose plan has changes opens a `terraform-pending` issue
+# instead; the manual run applies exactly the plan it prints and closes the
+# issue. Infrastructure changes wait for a human; app deploys don't.
+#
+# Dormant until the repo is a real deployment: the template ships no backend,
+# so the `ready` job skips the apply until `terraform/backends/dev.hcl` exists.
+# To switch it on in a repo made from this template:
+#   1. github-repos: add the repo to `state_consumers` with its
+#      `deploy_resource_groups`, and `make apply`. That creates the OIDC
+#      identity and sets AZURE_CLIENT_ID, AZURE_TENANT_ID and
+#      AZURE_SUBSCRIPTION_ID on the repo's `dev` GitHub environment.
+#   2. Make `terraform/` the root module (provider block, backend "azurerm"
+#      {}) and add `terraform/backends/dev.hcl`. terraform-deploy.yml inits
+#      with that file and plans with `terraform/environments/dev.tfvars`.
+#   3. First `make apply` locally, then let this take over.
+#
+# Only dev is ever applied. Auth is that identity: the shared job runs in the
+# `dev` environment, so the token subject is `<repo prefix>:environment:dev`,
+# the one subject its federated credential trusts. It holds Contributor on its
+# own resource group(s) and Reader on the subscription, and no right to create
+# role assignments, so grant RBAC to explicit object IDs, never to "whoever
+# applies".
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".terraform-version"
+      - ".github/workflows/cd-terraform.yml"
+  # The manual apply: also re-runs a failed apply, or corrects drift.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: terraform/backends
+      - id: check
+        run: |
+          if [ -f terraform/backends/dev.hcl ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No terraform/backends/dev.hcl yet, so there is nothing to deploy. See the comment at the top of cd-terraform.yml."
+          fi
+
+  apply:
+    needs: ready
+    if: needs.ready.outputs.ready == 'true'
+    permissions:
+      id-token: write
+      contents: read
+      issues: write # the terraform-pending and deploy-failed issues
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@ad07194424d08c4f56947d5e410dbfabb130d3a1 # v1.14.6
+    with:
+      environment: dev
+      apply: ${{ github.event_name == 'workflow_dispatch' }}
