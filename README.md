@@ -37,11 +37,12 @@ In order, once:
 
 1. **github-repos** already lists this repo as a state consumer, so the OIDC
    identity and the `dev` environment's `AZURE_*` variables exist.
-2. **Merge the first pull request.** `cd-tag` released `v0.1.0` and published
-   `ghcr.io/jay-withers/observability/grafana:v0.1.0`, the tag the first
-   apply seeds the app with. Its deploy job fails,
-   because the app does not exist yet: expected, and it closes on the next
-   successful deploy.
+2. **Merge the first pull request.** `cd-tag` releases and publishes
+   `ghcr.io/jay-withers/observability/grafana`. Its deploy job fails, because
+   the app does not exist yet: expected, and the `deploy-failed` issue closes
+   on the next successful deploy. Terraform never names a release: it creates
+   the app on dev-containers' `placeholder` image, which answers 200 on every
+   path, and the first deploy puts Grafana on.
 3. **Make the package public**: GitHub → your packages →
    `observability/grafana` → Package settings → Change visibility. New
    packages start private whatever the repository's visibility, and the
@@ -58,6 +59,8 @@ In order, once:
    the `cae-platform-dev` join and `send_events = true` to this repo's
    `state_consumers` entry, and `make apply` there. From then on cd-terraform
    applies, cd-publish deploys, and every deploy is recorded like any app's.
+   Re-run the failed deploy from step 2 (or `make deploy IMAGE_TAG=<release>`)
+   to replace the placeholder with Grafana.
 7. **`make url`**, sign in, open *Platform → Deployments*.
 
 ## Commands

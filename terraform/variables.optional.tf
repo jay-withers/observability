@@ -34,27 +34,3 @@ variable "platform_workspace_name" {
   type        = string
   default     = "log-platform-dev"
 }
-
-
-variable "image_registry" {
-  description = "Registry and repository prefix the Grafana image is pulled from. A public package on ghcr.io, like every app here: a private one would need a pull secret, and there is no Azure Container Registry."
-  type        = string
-  default     = "ghcr.io/jay-withers/observability"
-}
-
-variable "image_tag" {
-  description = "Image tag seeding the app's **first** revision only. Every deploy after that is `make deploy IMAGE_TAG=vX.Y.Z`, because the container's image sits under `ignore_changes`."
-  type        = string
-  # Must name a tag that exists in the registry, or the first revision fails
-  # on the image pull long after apply reports success. v0.1.0 is the first
-  # release with an image: v0.0.1 was tagged when the repo was created from
-  # its template, before anything here built one.
-  default = "v0.1.0"
-
-  validation {
-    # A moving tag deploys nothing: Container Apps creates a revision only when
-    # the template changes.
-    condition     = !contains(["latest", "main", "unset"], var.image_tag)
-    error_message = "image_tag must be an immutable tag, not latest/main/unset."
-  }
-}

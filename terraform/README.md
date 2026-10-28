@@ -41,8 +41,6 @@
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_environment"></a> [environment](#input\_environment) | Deployment environment. Drives resource naming, and selects which shared platform environment Grafana runs on. | `string` | n/a | yes |
-| <a name="input_image_registry"></a> [image\_registry](#input\_image\_registry) | Registry and repository prefix the Grafana image is pulled from. A public package on ghcr.io, like every app here: a private one would need a pull secret, and there is no Azure Container Registry. | `string` | `"ghcr.io/jay-withers/observability"` | no |
-| <a name="input_image_tag"></a> [image\_tag](#input\_image\_tag) | Image tag seeding the app's **first** revision only. Every deploy after that is `make deploy IMAGE_TAG=vX.Y.Z`, because the container's image sits under `ignore_changes`. | `string` | `"v0.1.0"` | no |
 | <a name="input_platform_environment_name"></a> [platform\_environment\_name](#input\_platform\_environment\_name) | Name of the shared Container Apps environment Grafana runs on. | `string` | `"cae-platform-dev"` | no |
 | <a name="input_platform_resource_group_name"></a> [platform\_resource\_group\_name](#input\_platform\_resource\_group\_name) | Resource group holding the shared Container Apps environment, workspace and Postgres server (jay-withers/azure-container-apps). | `string` | `"rg-platform-dev"` | no |
 | <a name="input_platform_workspace_name"></a> [platform\_workspace\_name](#input\_platform\_workspace\_name) | Name of the shared Log Analytics workspace Grafana reads, which holds Deployments\_CL and OpsEvents\_CL. | `string` | `"log-platform-dev"` | no |
