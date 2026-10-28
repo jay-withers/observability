@@ -1,0 +1,789 @@
+{
+  "uid": "deployments",
+  "title": "Deployments",
+  "description": "Every run of jay-withers/workflows' container-apps-deploy.yml, from Deployments_CL. Provisioned from jay-withers/observability: edit the JSON there, not here.",
+  "tags": [
+    "platform",
+    "deployments"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "custom",
+        "query": "dev",
+        "current": {
+          "text": "dev",
+          "value": "dev"
+        },
+        "options": [
+          {
+            "text": "dev",
+            "value": "dev",
+            "selected": true
+          }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Deploys",
+      "description": "Runs of container-apps-deploy.yml in the range, whatever the outcome.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Success rate",
+      "description": "Deploys that went live: smoke-tested, or untested where the repo has no smoke target.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize rate = 100.0 * countif(Outcome in (\"success\", \"untested\")) / count()",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Rolled back",
+      "description": "Failed their smoke test; the previous version was restored and passed.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize n = countif(Outcome == \"rolled_back\")",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failed",
+      "description": "Failed with nothing restored. Each one has a deploy-failed issue in its repo.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize n = countif(Outcome == \"failed\")",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Median lead time",
+      "description": "From the released commit to live.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize p50 = percentile(LeadTimeSec, 50)",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Renovate share",
+      "description": "Deploys whose released commit was a Renovate merge.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize share = 100.0 * countif(Trigger == \"renovate\") / count()",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Deploys per day, by trigger",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize Deploys = count() by bin(TimeGenerated, 1d), Trigger\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineWidth": 1
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Outcomes per day",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize Deploys = count() by bin(TimeGenerated, 1d), Outcome\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineWidth": 1
+          },
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deploys success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deploys untested"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deploys rolled_back"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deploys failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "By app",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| summarize Deploys = count(),\n            SuccessPct = round(100.0 * countif(Outcome in (\"success\", \"untested\")) / count(), 1),\n            RolledBack = countif(Outcome == \"rolled_back\"),\n            Failed = countif(Outcome == \"failed\"),\n            MedianLeadTime = percentile(LeadTimeSec, 50),\n            arg_max(TimeGenerated, Version, Outcome)\n          by Repo, App\n| project Repo, App, ['Last deploy'] = TimeGenerated, ['Last version'] = Version, ['Last outcome'] = Outcome,\n          Deploys, ['Success %'] = SuccessPct, ['Rolled back'] = RolledBack, Failed, ['Median lead time'] = MedianLeadTime\n| order by ['Last deploy'] desc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Median lead time"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Recent deploys",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Deployments_CL\n| where $__timeFilter(TimeGenerated)\n| where Environment == \"$environment\"\n| project TimeGenerated, Repo, App, Version, PreviousVersion, Outcome, Trigger, LeadTimeSec, CommitSha = substring(CommitSha, 0, 7), RunUrl\n| order by TimeGenerated desc\n| take 100",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "LeadTimeSec"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lead time"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Outcome"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "success": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "untested": {
+                        "color": "blue",
+                        "index": 1
+                      },
+                      "rolled_back": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

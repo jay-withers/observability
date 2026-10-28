@@ -1,30 +1,31 @@
-# outputs.tf — values exported by this module.
-
-output "environment" {
-  description = "The deployment environment passed to the module."
-  value       = var.environment
-}
-
-output "resource_group_id" {
-  description = "ID of the created resource group."
-  value       = azurerm_resource_group.this.id
-}
-
 output "resource_group_name" {
-  description = "Name of the created resource group."
+  description = "This project's resource group."
   value       = azurerm_resource_group.this.name
 }
 
-output "resource_group_location" {
-  description = "Location of the created resource group."
-  value       = azurerm_resource_group.this.location
+output "container_app_name" {
+  description = "Name of the Grafana container app, which `make deploy` passes to `az containerapp update`."
+  value       = azurerm_container_app.this.name
 }
 
-# Add further module outputs below.
-#
-# Example:
-#
-# output "id" {
-#   description = "Identifier of the created resource."
-#   value       = resource_type.this.id
-# }
+output "grafana_url" {
+  description = "Grafana's stable HTTPS URL."
+  value       = local.public_url
+}
+
+output "admin_password" {
+  description = "Password for Grafana's `admin` user. `make admin-password` prints it."
+  value       = random_password.admin.result
+  sensitive   = true
+}
+
+output "database_password" {
+  description = "Password of the `grafana` role on the shared Postgres server, which `make db-role` sets."
+  value       = random_password.database.result
+  sensitive   = true
+}
+
+output "postgres_fqdn" {
+  description = "The shared Postgres server, for `make db-role`."
+  value       = var.postgres_fqdn
+}

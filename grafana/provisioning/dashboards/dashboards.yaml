@@ -1,0 +1,13 @@
+# Loads every dashboard JSON under /var/lib/grafana/dashboards (grafana/dashboards
+# in the repo). Not editable in the UI: the file is the source of truth.
+apiVersion: 1
+
+providers:
+  - name: observability
+    folder: Platform
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

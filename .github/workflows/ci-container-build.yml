@@ -1,0 +1,81 @@
+name: ci-container-build
+
+# Builds the image on a pull request, without pushing.
+#
+# The runners are amd64, which is what Container Apps runs, so this build is
+# native. A local `make build` on Apple Silicon has to emulate amd64 through
+# QEMU — CI proving the image builds on the target architecture is the point,
+# not a side effect.
+#
+# The mechanics live in jay-withers/workflows' docker.yml, which cd-publish
+# also calls. That shared call is what keeps this honest: as two hand-written
+# workflows they could drift on context, platform or cache scope, and a green
+# pull request would then prove less about the release than it looks like it
+# does. Here the only difference is `push`.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The path filter lives here rather than on the trigger, so the workflow runs
+  # on every pull request and the container-build gate below always reports.
+  # A trigger-level filter would mean a docs-only pull request never produced
+  # the check, and a required check that never reports leaves the pull request
+  # pending for ever.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: filter
+        with:
+          filters: |
+            image:
+              - 'grafana/**'
+              - '.github/workflows/ci-container-build.yml'
+
+  # push is left at its default of false: a pull request must never publish an
+  # image, and a fork's GITHUB_TOKEN could not push anyway. The cache is shared
+  # with cd-publish by image name, so a merge usually reuses the PR's layers.
+  build:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    permissions:
+      contents: read
+      security-events: write # Trivy findings to code scanning
+    uses: jay-withers/workflows/.github/workflows/docker.yml@dc63b76bc1bc531e8c81dbf1e2833bf22ab355f5 # v1.16.0
+    with:
+      images: |
+        [{"name": "grafana", "context": "grafana"}]
+
+  # The required status check ("container-build"). Skipped counts as success,
+  # so a pull request that touches nothing in the image passes; a failed or
+  # cancelled build fails it, so Renovate cannot auto-merge a Grafana base
+  # image that does not build.
+  container-build:
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the build job
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          echo "changes=$CHANGES_RESULT build=$BUILD_RESULT"
+          # A failed path filter skips the build, which must not read as a pass.
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "::error::The path filter did not run, so the build was never decided."
+            exit 1
+          fi
+          if [ "$BUILD_RESULT" = "failure" ] || [ "$BUILD_RESULT" = "cancelled" ]; then
+            echo "::error::The container build failed."
+            exit 1
+          fi
