@@ -60,6 +60,13 @@ resource "azurerm_container_app" "this" {
         }
       }
 
+      # Read by the first revision's placeholder image only (Grafana binds
+      # target_port itself), so the probes find it on the port they check.
+      env {
+        name  = "PORT"
+        value = tostring(local.target_port)
+      }
+
       env {
         name        = "GF_DATABASE_PASSWORD"
         secret_name = "database-password"

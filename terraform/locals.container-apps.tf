@@ -1,5 +1,16 @@
 locals {
-  image = "${var.image_registry}/grafana:${var.image_tag}"
+  # **The first revision runs a placeholder, not Grafana.** Terraform only
+  # needs an image to create the app; the first `make deploy` (cd-publish, on
+  # the first release) puts Grafana on, and the image is under
+  # `ignore_changes`, so Terraform never touches it again. The placeholder
+  # answers 200 on every path on $PORT, so the probes pass. This replaced
+  # seeding from a release tag, which had to be guessed (v0.1.0 here, not
+  # v0.0.1) and failed only when the revision pulled it.
+  #
+  # `latest` deliberately: dev-containers prunes all but its last ten releases
+  # and never `latest`, and a moving tag's usual trap (a re-push deploys
+  # nothing) can't apply to an image used only at create.
+  image = "ghcr.io/jay-withers/dev-containers/placeholder:latest"
 
   # Grafana's default port; the Dockerfile EXPOSEs it and both probes check it.
   target_port = 3000

@@ -35,6 +35,11 @@ state.
   it as the Entra administrator.
 - **One local admin, no Entra SSO** (no app registration). Sign-up and
   anonymous access are off.
+- **Created on dev-containers' `placeholder:latest`, never a release tag.**
+  Terraform needs an image before any release exists; a guessed tag (v0.0.1
+  vs v0.1.0, observability#4) passes plan and apply and fails only on the
+  pull. The placeholder answers 200 on every path on `$PORT`, which is why
+  `PORT` is set; Grafana ignores it. The first deploy puts Grafana on.
 - **Scale to zero.** Grafana is opened a few times a week. Alerting lives in
   Azure Monitor, so nothing depends on it being awake.
 - **Its own smoke test** (`scripts/smoke.sh`), not the app repos' shared one,
