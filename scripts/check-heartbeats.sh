@@ -52,11 +52,11 @@ let jobs = ContainerAppSystemLogs_CL
       Detail = strcat("Last success ", format_datetime(lastok, "yyyy-MM-dd HH:mm"),
         " UTC. Overdue after ", round(allowed / 1h, 1), "h (1.5x its longest gap in 30 days, at least 2h).");
 let deploys = Deployments_CL
-  | summarize last = max(TimeGenerated)
+  | summarize lastdeploy = max(TimeGenerated)
   | project Name = "Deployments_CL",
-      Status = iff(isnull(last) or now() - last > 14d, "overdue", "ok"),
-      Detail = iff(isnull(last), "No deploy rows in 30 days.",
-        strcat("Last deploy row ", format_datetime(last, "yyyy-MM-dd HH:mm"), " UTC. Overdue after 14 days."));
+      Status = iff(isnull(lastdeploy) or now() - lastdeploy > 14d, "overdue", "ok"),
+      Detail = iff(isnull(lastdeploy), "No deploy rows in 30 days.",
+        strcat("Last deploy row ", format_datetime(lastdeploy, "yyyy-MM-dd HH:mm"), " UTC. Overdue after 14 days."));
 union jobs, deploys
 | order by Name asc
 KQL
