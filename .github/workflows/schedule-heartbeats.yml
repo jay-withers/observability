@@ -1,0 +1,55 @@
+name: schedule-heartbeats
+
+# Hourly: is every Container Apps job on the shared environment still running
+# on schedule? scripts/check-heartbeats.sh learns each job's cadence from 30
+# days of ContainerAppSystemLogs_CL and records one OpsEvents_CL `heartbeat`
+# row per job (`ok` or `overdue`), plus one for Deployments_CL. The platform's
+# `ops_event_bad` alert fires on `overdue`; `ops_events_silent` fires if these
+# hourly rows stop, which is what catches this workflow itself dying.
+#
+# Here rather than as an Azure Monitor rule because a log alert can look back
+# at most two days, and a weekly job's cadence needs weeks of history. Runs in
+# `dev` as this repo's identity: subscription Reader reads the workspace, and
+# `send_events` lets it post.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heartbeats:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # The workspace by name, the same defaults as platform_workspace_name
+      # and platform_resource_group_name in terraform/.
+      - name: Check jobs
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          workspace="$(az resource show -g rg-platform-dev -n log-platform-dev \
+            --resource-type Microsoft.OperationalInsights/workspaces --query properties.customerId -o tsv)"
+          scripts/check-heartbeats.sh "$workspace" "$RUN_URL" > "$RUNNER_TEMP/rows.json"
+
+      - name: Record the heartbeat events
+        env:
+          EVENTS_INGESTION_ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
+          EVENTS_DCR_IMMUTABLE_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
+        run: |
+          scripts/post-ops-events.sh "$RUNNER_TEMP/rows.json"
+          jq -r '.[] | "- `\(.Name)`: \(.Status). \(.Detail)"' "$RUNNER_TEMP/rows.json" >> "$GITHUB_STEP_SUMMARY"

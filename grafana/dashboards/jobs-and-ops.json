@@ -1,0 +1,746 @@
+{
+  "uid": "jobs-and-ops",
+  "title": "Jobs and ops",
+  "description": "Liveness: job heartbeats, failed job runs, Terraform drift and certificate expiry, from OpsEvents_CL and ContainerAppSystemLogs_CL. Provisioned from jay-withers/observability: edit the JSON there, not here.",
+  "tags": [
+    "platform",
+    "operations"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "custom",
+        "query": "dev",
+        "current": {
+          "text": "dev",
+          "value": "dev"
+        },
+        "options": [
+          {
+            "text": "dev",
+            "value": "dev",
+            "selected": true
+          }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Problems now",
+      "description": "Checks whose latest result is failed, drifted, expiring or overdue: what the platform's ops_event_bad alert is firing on.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status) by Kind, Name\n| where Status in (\"failed\", \"drifted\", \"expiring\", \"overdue\")\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Jobs overdue",
+      "description": "Container Apps jobs whose last successful run is older than 1.5x their longest normal gap (observability's hourly heartbeat check).",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(3h)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| where Status == \"overdue\"\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Roots drifted",
+      "description": "Terraform roots whose latest nightly drift plan had changes or failed.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"drift\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| where Status in (\"drifted\", \"failed\")\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Certificates expiring",
+      "description": "Custom-domain TLS certificates with fewer than 21 days left, or no certificate at all.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"expiry\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| where Status in (\"expiring\", \"failed\")\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Jobs",
+      "description": "Latest heartbeat per Container Apps job, from observability's hourly check. Cadence is learned from 30 days of system logs, so there is no job list to keep up to date.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(3h)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "drifted": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "expiring": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "overdue": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Failed job runs",
+      "description": "Executions that ended in a failure reason, in the dashboard's time range. DeadlineExceeded (ran past its timeout) is listed here but not alerted on by workload_crashed.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "ContainerAppSystemLogs_CL\n| where $__timeFilter(TimeGenerated)\n| where isnotempty(JobName_s)\n| where Reason_s in (\"BackoffLimitExceeded\", \"DeadlineExceeded\", \"ContainerCrashing\", \"StartError\")\n| summarize Failures = count(), Last = max(TimeGenerated), Sample = take_any(Log_s) by Job = JobName_s, Reason = Reason_s\n| order by Last desc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": true,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "drifted": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "expiring": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "overdue": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Terraform drift",
+      "description": "Latest nightly drift plan per Terraform root (schedule-drift.yml in each repo).",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"drift\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "drifted": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "expiring": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "overdue": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Certificates",
+      "description": "Latest TLS expiry check per custom domain (schedule-expiry.yml here).",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"expiry\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Name asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "drifted": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "expiring": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "overdue": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
