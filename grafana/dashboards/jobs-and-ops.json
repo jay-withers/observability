@@ -436,7 +436,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "ContainerAppSystemLogs_CL\n| where $__timeFilter(TimeGenerated)\n| where isnotempty(JobName_s)\n| where Reason_s in (\"BackoffLimitExceeded\", \"DeadlineExceeded\", \"ContainerCrashing\", \"StartError\")\n| summarize Failures = count(), Last = max(TimeGenerated), Sample = take_any(Log_s) by Job = JobName_s, Reason = Reason_s\n| order by Last desc",
+            "query": "ContainerAppSystemLogs_CL\n| where $__timeFilter(TimeGenerated)\n| where isnotempty(JobName_s)\n| where Reason_s in (\"BackoffLimitExceeded\", \"DeadlineExceeded\", \"ContainerCrashing\", \"StartError\")\n| summarize Failures = count(), LastFailure = max(TimeGenerated), Sample = take_any(Log_s) by Job = JobName_s, Reason = Reason_s\n| order by LastFailure desc",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],
