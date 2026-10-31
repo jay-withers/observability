@@ -1,0 +1,7 @@
+# Hostnames whose TLS certificate scripts/check-expiry.sh checks every night.
+# One per line; `#` starts a comment. Add a host when a custom domain is bound.
+finances.jaywithers.uk
+marketagent.jaywithers.uk
+observability.jaywithers.uk
+# Served by Cloudflare's edge (a Tunnel to the home PC), which renews it.
+health.jaywithers.uk

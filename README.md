@@ -25,6 +25,11 @@ on every deploy. Later phases add dashboards for jobs and operations
   The panels name the workspace by resource ID, which `grafana/entrypoint.sh`
   fills in at start-up from `WORKSPACE_RESOURCE_ID`, so the JSON in git
   carries no subscription.
+- **Certificate expiry is checked here, nightly.** `schedule-expiry.yml` runs
+  `scripts/check-expiry.sh` over `scripts/expiry-hosts.txt` (a TLS handshake
+  per host, which doesn't wake a scale-to-zero app) and records one
+  `OpsEvents_CL` row per host. `make expiry` prints the same rows locally. Add
+  a host to the file when a custom domain is bound.
 - **Alerting is not here.** It stays in Azure Monitor (azure-container-apps),
   so nothing depends on Grafana being awake.
 

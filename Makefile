@@ -9,7 +9,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password db-role
+.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password db-role expiry
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -134,3 +134,6 @@ db-role: ## Create or re-password Grafana's role on the shared Postgres server
 	PGPASSWORD="$$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)" \
 	psql "host=$$fqdn dbname=grafana sslmode=require user=$$(az ad signed-in-user show --query userPrincipalName -o tsv)" \
 		-v pw="$$(terraform -chdir=$(TF_DIR) output -raw database_password)" -f sql/grafana-role.sql
+
+expiry: ## Print the TLS expiry rows schedule-expiry.yml would record
+	scripts/check-expiry.sh scripts/expiry-hosts.txt
