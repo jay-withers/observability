@@ -10,20 +10,25 @@ name: cd-terraform
 # so the `ready` job skips the apply until `terraform/backends/dev.hcl` exists.
 # To switch it on in a repo made from this template:
 #   1. github-repos: add the repo to `state_consumers` with its
-#      `deploy_resource_groups`, and `make apply`. That creates the OIDC
-#      identity and sets AZURE_CLIENT_ID, AZURE_TENANT_ID and
-#      AZURE_SUBSCRIPTION_ID on the repo's `dev` GitHub environment.
+#      `deploy_resource_groups` and `create_resource_groups = true`, merge,
+#      and run github-repos' cd-terraform. That creates the resource group,
+#      the OIDC identity and its grants, and sets AZURE_CLIENT_ID,
+#      AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID on the repo's `dev` GitHub
+#      environment.
 #   2. Make `terraform/` the root module (provider block, backend "azurerm"
 #      {}) and add `terraform/backends/dev.hcl`. terraform-deploy.yml inits
 #      with that file and plans with `terraform/environments/dev.tfvars`.
-#   3. First `make apply` locally, then let this take over.
+#   3. Merge, then run this workflow to apply. No local first apply is
+#      needed unless the root grants roles outside its own resource group.
 #
 # Only dev is ever applied. Auth is that identity: the shared job runs in the
 # `dev` environment, so the token subject is `<repo prefix>:environment:dev`,
-# the one subject its federated credential trusts. It holds Contributor on its
-# own resource group(s) and Reader on the subscription, and no right to create
-# role assignments, so grant RBAC to explicit object IDs, never to "whoever
-# applies".
+# the one subject its federated credential trusts. It holds Contributor and
+# conditioned Role Based Access Control Administrator on its own resource
+# group(s) and Reader on the subscription, so role assignments inside the group
+# apply here and any elsewhere need a local `make apply`. Grant RBAC to
+# explicit object IDs, never to "whoever applies", or every run moves the
+# grant to the pipeline identity.
 on:
   push:
     branches: [main]
