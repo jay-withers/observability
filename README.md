@@ -89,9 +89,10 @@ In order, once:
 
 Grafana is served at `observability.jaywithers.uk` (`custom_domain_name` in
 `environments/dev.tfvars`) with a free Azure-managed certificate, the same
-way finances, gym-log and career are. `make dns` prints the CNAME and
-`asuid` TXT records; on Cloudflare they are **DNS only**, never proxied, or
-certificate validation fails. Both must resolve before the apply.
+way finances, gym-log and career are. Its CNAME and `asuid` TXT records are
+the `observability` entry in [jay-withers/cloudflare](https://github.com/jay-withers/cloudflare)'s `app_domains`, **DNS
+only**, never proxied, or certificate validation fails (`make dns` prints
+what they should be). Both must resolve before the apply.
 
 Adding or changing the domain is a **local** `make apply`, then
 `make bind-domain`: the certificate is created in the platform's resource
