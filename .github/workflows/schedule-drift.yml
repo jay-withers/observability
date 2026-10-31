@@ -1,0 +1,51 @@
+name: schedule-drift
+
+# Nightly drift check: plans dev through the shared terraform-deploy.yml with
+# `drift: true`, which records the result (ok, drifted or failed) as one
+# OpsEvents_CL row and never applies or opens a `terraform-pending` issue.
+# The platform's alert on that table reports a drifted root; Grafana's Jobs
+# and ops dashboard shows the latest result per root. A drifted plan is still
+# a green run. To fix drift, run cd-terraform by hand, or change the
+# configuration to match.
+#
+# Same environment and identity as cd-terraform's plans. The row needs
+# EVENTS_INGESTION_ENDPOINT and EVENTS_DCR_IMMUTABLE_ID on `dev`, which
+# github-repos sets with `send_events`. Staggered minute so the estate's
+# drift checks don't all queue at once.
+on:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: terraform/backends
+      - id: check
+        run: |
+          if [ -f terraform/backends/dev.hcl ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No terraform/backends/dev.hcl yet, so there is nothing to check. See the comment at the top of cd-terraform.yml."
+          fi
+
+  drift:
+    needs: ready
+    if: needs.ready.outputs.ready == 'true'
+    permissions:
+      id-token: write
+      contents: read
+      issues: write # a clean plan closes a stale deploy-failed issue
+    uses: jay-withers/workflows/.github/workflows/terraform-deploy.yml@cf0cef323fa1178c47faf5bde016cc329572652e # v1.19.0
+    with:
+      environment: dev
+      drift: true
