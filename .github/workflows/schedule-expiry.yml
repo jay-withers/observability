@@ -42,21 +42,8 @@ jobs:
 
       - name: Record the expiry events
         env:
-          ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
-          DCR_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
+          EVENTS_INGESTION_ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
+          EVENTS_DCR_IMMUTABLE_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
         run: |
-          if [ -z "$ENDPOINT" ] || [ -z "$DCR_ID" ]; then
-            echo "::error::EVENTS_INGESTION_ENDPOINT or EVENTS_DCR_IMMUTABLE_ID is not set on the dev environment."
-            exit 1
-          fi
-          token="$(az account get-access-token --resource https://monitor.azure.com --query accessToken -o tsv)"
-          code="$(curl -sS -o "$RUNNER_TEMP/ingest.out" -w '%{http_code}' -X POST \
-            "${ENDPOINT%/}/dataCollectionRules/${DCR_ID}/streams/Custom-OpsEvents_CL?api-version=2023-01-01" \
-            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
-            --data @"$RUNNER_TEMP/rows.json")"
-          # 204 is the only success: the API accepts the batch whole or not at all.
-          if [ "$code" != "204" ]; then
-            echo "::error::Recording the expiry events failed with HTTP $code: $(cat "$RUNNER_TEMP/ingest.out")"
-            exit 1
-          fi
+          scripts/post-ops-events.sh "$RUNNER_TEMP/rows.json"
           jq -r '.[] | "- `\(.Name)`: \(.Status). \(.Detail)"' "$RUNNER_TEMP/rows.json" >> "$GITHUB_STEP_SUMMARY"

@@ -6,8 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Grafana for the jay-withers Container Apps estate: a scale-to-zero container
 app on the shared environment, reading the shared Log Analytics workspace.
-Phase 1 of the observability plan ships the Deployments dashboard over
-`Deployments_CL`. `README.md` covers the why and the first-time setup; this
+It ships the Deployments dashboard over `Deployments_CL` (phase 1 of the
+observability plan) and Jobs and ops over `OpsEvents_CL` (phase 2), and runs
+two of the checks that feed the latter: `schedule-expiry` and
+`schedule-heartbeats`. `README.md` covers the why and the first-time setup; this
 file covers the traps.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),

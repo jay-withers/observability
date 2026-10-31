@@ -5,11 +5,17 @@ Grafana over the shared Log Analytics workspace, for every app on the
 did the last deploy work, is the app healthy, are its jobs running, and what
 is it costing.
 
-It is phase 1 of the observability plan: the **Deployments** dashboard, read
-from the `Deployments_CL` table that
-[`container-apps-deploy.yml`](https://github.com/jay-withers/workflows) writes
-on every deploy. Later phases add dashboards for jobs and operations
-(`OpsEvents_CL`), app health, delivery and cost.
+Two dashboards so far:
+
+- **Deployments** (phase 1 of the observability plan), from the
+  `Deployments_CL` table that
+  [`container-apps-deploy.yml`](https://github.com/jay-withers/workflows)
+  writes on every deploy.
+- **Jobs and ops** (phase 2, liveness), from `OpsEvents_CL`: a heartbeat per
+  Container Apps job, failed job runs, nightly Terraform drift per root and
+  certificate expiry per custom domain.
+
+Later phases add app health, delivery and cost.
 
 ## How it fits together
 
@@ -30,6 +36,13 @@ on every deploy. Later phases add dashboards for jobs and operations
   per host, which doesn't wake a scale-to-zero app) and records one
   `OpsEvents_CL` row per host. `make expiry` prints the same rows locally. Add
   a host to the file when a custom domain is bound.
+- **Job heartbeats are computed here, hourly.** `schedule-heartbeats.yml` runs
+  `scripts/check-heartbeats.sh`, which learns each job's cadence from 30 days
+  of `ContainerAppSystemLogs_CL` (no job list to maintain) and records one
+  `heartbeat` row per job: `overdue` once its last success is older than 1.5x
+  its longest normal gap. A log alert can look back only two days, too short
+  for a weekly job, which is why this isn't an Azure Monitor rule.
+  `scripts/post-ops-events.sh` posts the rows for both scheduled checks.
 - **Alerting is not here.** It stays in Azure Monitor (azure-container-apps),
   so nothing depends on Grafana being awake.
 
