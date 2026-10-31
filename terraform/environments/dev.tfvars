@@ -4,6 +4,7 @@ environment = "dev"
 # suffix, so it is copied here rather than derived.
 postgres_fqdn = "psql-platform-dev-ayyl.postgres.database.azure.com"
 
-# CNAME and asuid TXT records are on Cloudflare, DNS only (not proxied): the
-# managed certificate is validated against the CNAME.
+# CNAME and asuid TXT records are in jay-withers/cloudflare's app_domains,
+# DNS only (not proxied): the managed certificate is validated against the
+# CNAME.
 custom_domain_name = "observability.jaywithers.uk"

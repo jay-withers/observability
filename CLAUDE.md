@@ -77,7 +77,8 @@ state.
   certificate is a child of the shared environment in `rg-platform-dev`,
   where cd-terraform's identity cannot write, and the provider cannot finish
   the bind (#27362). `certificate_binding_type` is under `ignore_changes`, or
-  every plan would propose unbinding it. Cloudflare records must be DNS only.
+  every plan would propose unbinding it. The DNS records are in
+  jay-withers/cloudflare's `app_domains`, and must stay DNS only.
 - **Only the image is under `ignore_changes`.** Env is managed by Terraform:
   nothing in it changes per release.
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files
