@@ -1,0 +1,62 @@
+name: schedule-expiry
+
+# Nightly TLS expiry check of every custom domain in scripts/expiry-hosts.txt,
+# recorded as one OpsEvents_CL row per host (Kind `expiry`, Status `ok`,
+# `expiring` or `failed`). The platform's alert on that table reports a bad
+# row; Grafana's Jobs and ops dashboard shows the days left per host. A host
+# that fails or is expiring is still a green run: only a failed post fails it,
+# since a silent gap would look exactly like a clean night.
+#
+# Runs in `dev` as this repo's identity, which github-repos lets send events
+# (`send_events`) and gives EVENTS_INGESTION_ENDPOINT and
+# EVENTS_DCR_IMMUTABLE_ID.
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expiry:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check certificates
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/check-expiry.sh scripts/expiry-hosts.txt "$RUN_URL" > "$RUNNER_TEMP/rows.json"
+
+      - name: Azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Record the expiry events
+        env:
+          ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
+          DCR_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
+        run: |
+          if [ -z "$ENDPOINT" ] || [ -z "$DCR_ID" ]; then
+            echo "::error::EVENTS_INGESTION_ENDPOINT or EVENTS_DCR_IMMUTABLE_ID is not set on the dev environment."
+            exit 1
+          fi
+          token="$(az account get-access-token --resource https://monitor.azure.com --query accessToken -o tsv)"
+          code="$(curl -sS -o "$RUNNER_TEMP/ingest.out" -w '%{http_code}' -X POST \
+            "${ENDPOINT%/}/dataCollectionRules/${DCR_ID}/streams/Custom-OpsEvents_CL?api-version=2023-01-01" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            --data @"$RUNNER_TEMP/rows.json")"
+          # 204 is the only success: the API accepts the batch whole or not at all.
+          if [ "$code" != "204" ]; then
+            echo "::error::Recording the expiry events failed with HTTP $code: $(cat "$RUNNER_TEMP/ingest.out")"
+            exit 1
+          fi
+          jq -r '.[] | "- `\(.Name)`: \(.Status). \(.Detail)"' "$RUNNER_TEMP/rows.json" >> "$GITHUB_STEP_SUMMARY"
