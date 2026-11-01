@@ -73,7 +73,7 @@ jq -c --arg time "$time" --arg today "$today" --arg run "$run_url" '
     elif .Category == "workload-profile" then
       [(.Profiles // [])[] | select(.workloadProfileType != "Consumption")] | length > 0
     else true end;
-  def label: "\(.resourceGroup)/\(.name)";
+  def where: "\(.resourceGroup)/\(.name)";
 
   [.data[] | select(billing)] as $up
   | ["firewall", "aks", "vm", "bastion", "vpn-gateway", "app-gateway", "nat-gateway", "workload-profile"]
@@ -84,8 +84,8 @@ jq -c --arg time "$time" --arg today "$today" --arg run "$run_url" '
       | {TimeGenerated: $time, Repo: "observability", Environment: "dev", Kind: "session", Name: $c,
          Status: (if ($left | length) > 0 then "running" else "ok" end),
          Detail: (
-           [ (if ($left | length) > 0 then "Still running: \([$left[] | label] | join(", ")). Tag session-until=YYYY-MM-DD to keep it." else empty end),
-             (if ($kept | length) > 0 then "Kept on purpose: \([$kept[] | "\(label) until \(.Until)"] | join(", "))." else empty end) ]
+           [ (if ($left | length) > 0 then "Still running: \([$left[] | where] | join(", ")). Tag session-until=YYYY-MM-DD to keep it." else empty end),
+             (if ($kept | length) > 0 then "Kept on purpose: \([$kept[] | "\(where) until \(.Until)"] | join(", "))." else empty end) ]
            | if length == 0 then "Nothing running." else join(" ") end),
          RunUrl: $run})' <<<"$result" \
   | tee >(jq -r '.[] | "\(.Name): \(.Status) - \(.Detail)"' >&2)
