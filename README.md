@@ -46,7 +46,10 @@ Later phases add app health and delivery.
   of `ContainerAppSystemLogs_CL` (no job list to maintain) and records one
   `heartbeat` row per job: `overdue` once its last success is older than 1.5x
   its longest normal gap. A log alert can look back only two days, too short
-  for a weekly job, which is why this isn't an Azure Monitor rule.
+  for a weekly job, which is why this isn't an Azure Monitor rule. It also
+  records a `check:` heartbeat for each daily check that writes `OpsEvents_CL`
+  (each root's drift, cost-feed, expiry, session), `overdue` after 36 hours
+  without a row, so a run that dies before it can post isn't silent.
   `scripts/post-ops-events.sh` posts the rows for every scheduled check.
 - **Session resources are checked here, nightly.** `schedule-session-resources.yml`
   runs `scripts/check-session-resources.sh`, one Resource Graph query for

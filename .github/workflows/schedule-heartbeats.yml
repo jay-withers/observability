@@ -3,7 +3,9 @@ name: schedule-heartbeats
 # Hourly: is every Container Apps job on the shared environment still running
 # on schedule? scripts/check-heartbeats.sh learns each job's cadence from 30
 # days of ContainerAppSystemLogs_CL and records one OpsEvents_CL `heartbeat`
-# row per job (`ok` or `overdue`), plus one for Deployments_CL. The platform's
+# row per job (`ok` or `overdue`), plus one for Deployments_CL and one per
+# daily check that writes OpsEvents_CL (drift per root, cost-feed, expiry,
+# session), so a check that dies before posting goes `overdue`. The platform's
 # `ops_event_bad` alert fires on `overdue`; `ops_events_silent` fires if these
 # hourly rows stop, which is what catches this workflow itself dying.
 #

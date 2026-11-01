@@ -23,6 +23,15 @@
 # Also one `heartbeat` row for Deployments_CL itself, `overdue` after 14 days
 # with no deploy at all, so a broken deploy event can't pass for a quiet week.
 #
+# And one `heartbeat` row per daily check that writes OpsEvents_CL itself
+# (every root's drift, plus cost-feed, expiry and session here), `overdue`
+# when its newest row is over 36 hours old. A run that dies before it can post
+# (a failed login, a broken checkout) otherwise leaves nothing behind but a red
+# run: ops_events_silent can't see it while these hourly rows keep coming.
+# Drift is tracked per root, the others per Kind. A root whose drift check is
+# removed reads `overdue` until it ages out of the 30 days, as a deleted job
+# does.
+#
 # The workspace is read with `az rest` against the Log Analytics query API;
 # the caller's identity needs read on the workspace (Reader is enough).
 set -euo pipefail
@@ -57,7 +66,15 @@ let deploys = Deployments_CL
       Status = iff(isnull(lastdeploy) or now() - lastdeploy > 14d, "overdue", "ok"),
       Detail = iff(isnull(lastdeploy), "No deploy rows in 30 days.",
         strcat("Last deploy row ", format_datetime(lastdeploy, "yyyy-MM-dd HH:mm"), " UTC. Overdue after 14 days."));
-union jobs, deploys
+let checks = OpsEvents_CL
+  | where Kind in ("drift", "cost-feed", "expiry", "session")
+  | extend Check = iff(Kind == "drift", strcat("drift ", Name), Kind)
+  | summarize lastrow = max(TimeGenerated) by Check
+  | project Name = strcat("check: ", Check),
+      Status = iff(now() - lastrow > 36h, "overdue", "ok"),
+      Detail = strcat("Last row ", format_datetime(lastrow, "yyyy-MM-dd HH:mm"),
+        " UTC. Overdue after 36h (a daily check).");
+union jobs, deploys, checks
 | order by Name asc
 KQL
 
