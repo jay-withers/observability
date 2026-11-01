@@ -42,7 +42,7 @@
       "id": 1,
       "type": "stat",
       "title": "Problems now",
-      "description": "Checks whose latest result is failed, drifted, expiring or overdue: what the platform's ops_event_bad alert is firing on.",
+      "description": "Checks whose latest result is failed, drifted, expiring, overdue or running: what the platform's ops_event_bad alert is firing on. Session resources and the cost feed are on the Costs dashboard.",
       "datasource": {
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
@@ -62,7 +62,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status) by Kind, Name\n| where Status in (\"failed\", \"drifted\", \"expiring\", \"overdue\")\n| count",
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status) by Kind, Name\n| where Status in (\"failed\", \"drifted\", \"expiring\", \"overdue\", \"running\")\n| count",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],

@@ -9,7 +9,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password db-role expiry
+.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password db-role expiry sessions costs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -137,3 +137,9 @@ db-role: ## Create or re-password Grafana's role on the shared Postgres server
 
 expiry: ## Print the TLS expiry rows schedule-expiry.yml would record
 	scripts/check-expiry.sh scripts/expiry-hosts.txt
+
+sessions: ## Print the session-resource rows schedule-session-resources.yml would record
+	scripts/check-session-resources.sh "$$(az account show --query id -o tsv)"
+
+costs: ## Print the Costs_CL rows schedule-costs.yml would record
+	scripts/check-costs.sh "$$(az account show --query id -o tsv)"

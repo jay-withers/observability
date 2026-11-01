@@ -1,0 +1,50 @@
+name: schedule-session-resources
+
+# Nightly: is a resource meant only for a working session (a firewall, an AKS
+# cluster, a VM, a workload profile) still up? scripts/check-session-resources.sh
+# records one OpsEvents_CL `session` row per category (`ok` or `running`).
+# The platform's ops_event_bad alert fires on `running`; tag a resource
+# `session-until=YYYY-MM-DD` to keep it overnight on purpose. A category that
+# is running is still a green run: only a failed query or post fails it.
+#
+# 03:31 UTC so an evening session has long since ended. Runs in `dev` as this
+# repo's identity: subscription Reader reads Resource Graph, and `send_events`
+# lets it post.
+on:
+  schedule:
+    - cron: "31 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sessions:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check session resources
+        env:
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/check-session-resources.sh "$SUBSCRIPTION_ID" "$RUN_URL" > "$RUNNER_TEMP/rows.json"
+
+      - name: Record the session events
+        env:
+          EVENTS_INGESTION_ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
+          EVENTS_DCR_IMMUTABLE_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
+        run: |
+          scripts/post-ops-events.sh "$RUNNER_TEMP/rows.json"
+          jq -r '.[] | "- `\(.Name)`: \(.Status). \(.Detail)"' "$RUNNER_TEMP/rows.json" >> "$GITHUB_STEP_SUMMARY"

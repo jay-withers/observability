@@ -5,7 +5,7 @@ Grafana over the shared Log Analytics workspace, for every app on the
 did the last deploy work, is the app healthy, are its jobs running, and what
 is it costing.
 
-Two dashboards so far:
+Three dashboards so far:
 
 - **Deployments** (phase 1 of the observability plan), from the
   `Deployments_CL` table that
@@ -14,8 +14,13 @@ Two dashboards so far:
 - **Jobs and ops** (phase 2, liveness), from `OpsEvents_CL`: a heartbeat per
   Container Apps job, failed job runs, nightly Terraform drift per root and
   certificate expiry per custom domain.
+- **Costs**, from `Costs_CL`: month to date and a month-end forecast against
+  the $150 budget, daily spend by area, month to date by resource group and by
+  service, and the nightly session-resource check. Figures are before any
+  credit, so on the Visual Studio subscription they are what pay-as-you-go
+  would charge.
 
-Later phases add app health, delivery and cost.
+Later phases add app health and delivery.
 
 ## How it fits together
 
@@ -42,7 +47,24 @@ Later phases add app health, delivery and cost.
   `heartbeat` row per job: `overdue` once its last success is older than 1.5x
   its longest normal gap. A log alert can look back only two days, too short
   for a weekly job, which is why this isn't an Azure Monitor rule.
-  `scripts/post-ops-events.sh` posts the rows for both scheduled checks.
+  `scripts/post-ops-events.sh` posts the rows for every scheduled check.
+- **Session resources are checked here, nightly.** `schedule-session-resources.yml`
+  runs `scripts/check-session-resources.sh`, one Resource Graph query for
+  things billed by the hour that are meant to exist only for a working
+  session: a firewall, a running AKS cluster, a VM that isn't deallocated, a
+  non-Developer bastion, a VPN, application or NAT gateway, a Container Apps
+  workload profile. It records one `session` row per category, `ok` or
+  `running`, and the platform's `ops_event_bad` alert fires on `running`. To
+  keep one overnight on purpose, tag it `session-until=YYYY-MM-DD`.
+  `make sessions` prints the rows locally.
+- **Costs are read here, daily.** `schedule-costs.yml` runs
+  `scripts/check-costs.sh`, which asks Cost Management for the last seven days
+  per resource group and service (Azure revises a day for about three) and
+  posts them to `Costs_CL`. The run also records a `cost-feed` row in
+  `OpsEvents_CL`, so a broken feed alerts instead of leaving the dashboard
+  stale. Both checks run as this repo's pipeline identity, whose subscription
+  Reader is enough for Resource Graph and Cost Management. `make costs` prints
+  the rows locally.
 - **Alerting is not here.** It stays in Azure Monitor (azure-container-apps),
   so nothing depends on Grafana being awake.
 
@@ -118,6 +140,9 @@ make dns              # the DNS records the custom domain needs
 make bind-domain      # finish binding the managed certificate after an apply
 make admin-password   # the admin password
 make db-role          # create or re-password Grafana's database role
+make expiry           # the TLS expiry rows schedule-expiry would record
+make sessions         # the session-resource rows schedule-session-resources would record
+make costs            # the Costs_CL rows schedule-costs would record
 ```
 
 ## Changing a dashboard
@@ -131,4 +156,5 @@ set) and replace the workspace ID with the placeholder before committing.
 
 The container app scales to zero, so it bills only while someone has it open.
 Its database is on the platform's shared Postgres server, whose cost belongs to
-azure-container-apps.
+azure-container-apps. The scheduled checks run on GitHub-hosted runners and
+add a few hundred rows a night to the workspace, inside its free grant.

@@ -1,0 +1,686 @@
+{
+  "title": "Costs",
+  "uid": "costs",
+  "version": 1,
+  "schemaVersion": 41,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "",
+  "tags": [
+    "platform",
+    "cost"
+  ],
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Month to date",
+      "description": "Spend this calendar month, before any credit: what pay-as-you-go would charge. Billing currency; amber from 120, red from 150 (the budget).",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost)",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "noValue": "No data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 120.0
+              },
+              {
+                "color": "#d03b3b",
+                "value": 150
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Month-end forecast",
+      "description": "Month to date divided by the days with cost data so far, times the days in the month. Cost data lags about a day, so this uses the last day that has any.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost), Last = max(UsageDate)\n| extend Days = datetime_diff('day', Last, startofmonth(now())) + 1\n| project Forecast = Cost / Days * dayofmonth(endofmonth(now()))",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "noValue": "No data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 120.0
+              },
+              {
+                "color": "#d03b3b",
+                "value": 150
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Budget used",
+      "description": "Month to date as a share of the 150 monthly budget in azure-landingzone's governance (the Visual Studio credit today).",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Used = sum(Cost) / 150 * 100",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "noValue": "No data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 80
+              },
+              {
+                "color": "#d03b3b",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Session resources running",
+      "description": "Categories whose latest nightly check found a firewall, cluster, VM or similar still up: what ops_event_bad fires on as `running`.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"session\"\n| summarize arg_max(TimeGenerated, Status) by Name\n| where Status == \"running\"\n| count",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "No data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#d03b3b",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Daily spend by area",
+      "description": "Latest figure per day, before any credit. Areas are fixed groups of resource groups; the tables below break them down.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| extend Area = case(\n    ResourceGroup == \"rg-platform-dev\", \"platform\",\n    ResourceGroup == \"rg-marketagent-dev\", \"market-agent\",\n    ResourceGroup == \"rg-aks-dev\", \"aks\",\n    ResourceGroup in (\"rg-gymlog-dev\", \"rg-career-dev\", \"rg-finances-dev\", \"rg-sectest-dev\", \"rg-repoagent-dev\", \"rg-observability-dev\"), \"apps\",\n    \"landing zone and other\")\n| summarize Cost = sum(Cost) by TimeGenerated = UsageDate, Area\n| order by TimeGenerated asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "time_series",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "lineWidth": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "none",
+          "decimals": 2,
+          "displayName": "${__field.labels.Area}"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "platform"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "market-agent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "apps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aks"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "landing zone and other"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Month to date by resource group",
+      "description": "Before any credit. (none) is subscription-level charges.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost) by ResourceGroup, Currency\n| order by Cost desc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Cost",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Month to date by service",
+      "description": "Before any credit.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost) by ServiceName, Currency\n| order by Cost desc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Cost",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.align",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Session resources and the cost feed",
+      "description": "Latest nightly result per category. Tag a resource session-until=YYYY-MM-DD to keep it up on purpose.",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "azure-monitor"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "azure-monitor"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind in (\"session\", \"cost-feed\")\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl) by Kind, Name\n| project Checked = TimeGenerated, Kind, Name, Status, Detail, RunUrl\n| order by Kind asc, Name asc",
+            "resources": [
+              "__WORKSPACE_RESOURCE_ID__"
+            ],
+            "resultFormat": "table",
+            "dashboardTime": false,
+            "timeColumn": "TimeGenerated"
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "drifted": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "expiring": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "overdue": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "running": {
+                        "color": "red",
+                        "index": 5
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RunUrl"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Run"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open the Actions run",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
