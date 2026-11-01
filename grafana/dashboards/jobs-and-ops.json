@@ -526,7 +526,7 @@
       "id": 7,
       "type": "table",
       "title": "Terraform drift",
-      "description": "Latest nightly drift plan per Terraform root (schedule-drift.yml in each repo).",
+      "description": "Latest nightly drift plan per Terraform root (schedule-drift.yml in each repo). pending: the plan has changes, but the root's terraform-pending issue is open, so it is a merged change waiting for its apply, not drift.",
       "datasource": {
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
@@ -600,6 +600,10 @@
                       "failed": {
                         "color": "red",
                         "index": 4
+                      },
+                      "pending": {
+                        "color": "blue",
+                        "index": 5
                       }
                     }
                   }
