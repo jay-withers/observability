@@ -1,0 +1,67 @@
+name: schedule-costs
+
+# Daily cost feed: scripts/check-costs.sh reads the last seven days of cost
+# per resource group and service from Cost Management, and this posts them to
+# the platform's Costs_CL table for Grafana's Costs dashboard. Seven days each
+# run because Azure revises a day for about three afterwards.
+#
+# The feed reports on itself as one OpsEvents_CL `cost-feed` row, `ok` or
+# `failed`, so a broken feed raises the platform's ops_event_bad alert rather
+# than leaving the dashboard quietly stale.
+#
+# Runs in `dev` as this repo's identity: subscription Reader reads costs, and
+# `send_events` lets it post.
+on:
+  schedule:
+    - cron: "13 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  costs:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      EVENTS_INGESTION_ENDPOINT: ${{ vars.EVENTS_INGESTION_ENDPOINT }}
+      EVENTS_DCR_IMMUTABLE_ID: ${{ vars.EVENTS_DCR_IMMUTABLE_ID }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Azure login
+        id: login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read costs
+        env:
+          SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: scripts/check-costs.sh "$SUBSCRIPTION_ID" "$RUN_URL" > "$RUNNER_TEMP/costs.json"
+
+      - name: Record the costs
+        run: |
+          scripts/post-ops-events.sh "$RUNNER_TEMP/costs.json" Costs_CL
+          jq -r '"Seven days: \(length) row(s), \(map(.Cost) | add // 0 | . * 100 | round / 100) \(.[0].Currency // "")."' \
+            "$RUNNER_TEMP/costs.json" >> "$GITHUB_STEP_SUMMARY"
+
+      # Without a login there is no way to post, so that failure shows only as
+      # a red run, and ops_events_silent would not notice one quiet feed. The
+      # cost-feed row covers everything after it.
+      - name: Record the feed's outcome
+        if: always() && steps.login.outcome == 'success'
+        env:
+          STATUS: ${{ job.status == 'success' && 'ok' || 'failed' }}
+        run: |
+          jq -cn --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg status "$STATUS" --arg run "$RUN_URL" \
+            --arg detail "$([[ "$STATUS" == ok ]] && echo "Posted $(jq length "$RUNNER_TEMP/costs.json") Costs_CL row(s)." || echo "The cost query or post failed: see the run.")" \
+            '[{TimeGenerated: $time, Repo: "observability", Environment: "dev", Kind: "cost-feed",
+               Name: "Costs_CL", Status: $status, Detail: $detail, RunUrl: $run}]' > "$RUNNER_TEMP/feed.json"
+          scripts/post-ops-events.sh "$RUNNER_TEMP/feed.json"

@@ -7,10 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Grafana for the jay-withers Container Apps estate: a scale-to-zero container
 app on the shared environment, reading the shared Log Analytics workspace.
 It ships the Deployments dashboard over `Deployments_CL` (phase 1 of the
-observability plan) and Jobs and ops over `OpsEvents_CL` (phase 2), and runs
-two of the checks that feed the latter: `schedule-expiry` and
-`schedule-heartbeats`. `README.md` covers the why and the first-time setup; this
-file covers the traps.
+observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
+`Costs_CL`. It also runs the checks that feed them: `schedule-expiry`,
+`schedule-heartbeats`, `schedule-session-resources` and `schedule-costs`.
+`README.md` covers the why and the first-time setup; this file covers the
+traps.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
 shaped like gym-log: its own resource group and identity, the environment,
@@ -81,6 +82,18 @@ state.
   jay-withers/cloudflare's `app_domains`, and must stay DNS only.
 - **Only the image is under `ignore_changes`.** Env is managed by Terraform:
   nothing in it changes per release.
+- **The scheduled checks run as the pipeline identity, not Grafana's.**
+  Its subscription Reader is what reads Resource Graph and Cost Management.
+  Grafana's own identity has `Log Analytics Reader` on the workspace and
+  nothing else, and needs nothing more: costs reach it as `Costs_CL` rows.
+- **Every `session` category gets a row on every run**, `ok` when nothing is
+  up. The alert takes the latest row per Kind and Name, so dropping the `ok`
+  rows would leave a deleted firewall's alert lit. A new category goes in the
+  script's list *and* its KQL `case`.
+- **The Costs dashboard's areas are fixed groups of resource groups**, so
+  each keeps its colour whatever the month's ranking. A new resource group
+  falls into "landing zone and other" until it is added to the `case` in
+  every panel that groups by area.
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files
   before `make lint`, or terraform-docs, tflint and checkov never see them.
 
