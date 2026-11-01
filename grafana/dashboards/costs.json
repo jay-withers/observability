@@ -40,7 +40,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost)",
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Cost = sum(Cost), Rows = count()\n| where Rows > 0\n| project Cost",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],
@@ -184,7 +184,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Used = sum(Cost) / 150 * 100",
+            "query": "Costs_CL\n| where TimeGenerated > ago(30d)\n| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName\n| where UsageDate >= startofmonth(now())\n| summarize Used = sum(Cost) / 150 * 100, Rows = count()\n| where Rows > 0\n| project Used",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],
@@ -579,7 +579,7 @@
         "uid": "azure-monitor"
       },
       "gridPos": {
-        "h": 10,
+        "h": 13,
         "w": 24,
         "x": 0,
         "y": 23

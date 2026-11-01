@@ -15,7 +15,9 @@
 # Subscription-level charges with no resource group read `(none)`.
 #
 # One query through `az rest`, following nextLink: Reader on the subscription
-# is enough to read costs.
+# is enough to read costs. Cost Management throttles hard (a 429 on a second
+# run ten minutes after the first), so each page retries a 429 with a growing
+# wait, up to about five minutes in all. Any other error fails at once.
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
@@ -42,8 +44,19 @@ body="$(jq -n --arg from "$from" --arg to "$to" '{
 
 url="https://management.azure.com/subscriptions/$subscription/providers/Microsoft.CostManagement/query?api-version=2023-11-01"
 pages=()
+err="$(mktemp)"
 while [[ -n "$url" ]]; do
-  page="$(az rest --method post --url "$url" --body "$body")"
+  for wait in 15 30 60 90 120 0; do
+    if page="$(az rest --method post --url "$url" --body "$body" 2>"$err")"; then
+      break
+    fi
+    if ! grep -q 'Too Many Requests' "$err" || (( wait == 0 )); then
+      cat "$err" >&2
+      exit 1
+    fi
+    echo "check-costs: throttled, retrying in ${wait}s." >&2
+    sleep "$wait"
+  done
   pages+=("$page")
   url="$(jq -r '.properties.nextLink // empty' <<<"$page")"
 done
