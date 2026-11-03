@@ -37,14 +37,3 @@ output "admin_password" {
   value       = random_password.admin.result
   sensitive   = true
 }
-
-output "database_password" {
-  description = "Password of the `grafana` role on the shared Postgres server, which `make db-role` sets."
-  value       = random_password.database.result
-  sensitive   = true
-}
-
-output "postgres_fqdn" {
-  description = "The shared Postgres server, for `make db-role`."
-  value       = var.postgres_fqdn
-}

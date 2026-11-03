@@ -20,11 +20,6 @@ locals {
   container_cpu    = 0.5
   container_memory = "1Gi"
 
-  # The role Grafana logs in to the shared server as. The Postgres role itself
-  # is created once by `make db-role`, with the password from this state.
-  database_user = "grafana"
-  database_name = "grafana"
-
   # Known before the app exists: an app's ingress FQDN is its name under the
   # environment's default domain. Grafana builds every link and redirect from
   # its root URL, so it has to be the one people use: the custom domain when
@@ -40,11 +35,12 @@ locals {
   grafana_env = {
     GF_SERVER_ROOT_URL = local.public_url
 
-    GF_DATABASE_TYPE     = "postgres"
-    GF_DATABASE_HOST     = "${var.postgres_fqdn}:5432"
-    GF_DATABASE_NAME     = local.database_name
-    GF_DATABASE_USER     = local.database_user
-    GF_DATABASE_SSL_MODE = "require"
+    # No GF_DATABASE_*: Grafana keeps its state in its default SQLite file on
+    # the replica's own disk, so it starts empty on every new replica. Nothing
+    # is lost. The dashboards and data source are provisioned from the image,
+    # and the admin's password comes from GF_SECURITY_ADMIN_PASSWORD on every
+    # start. What doesn't survive is UI-only state (preferences, starred
+    # dashboards), which a server billing every hour wasn't worth keeping.
 
     # One local admin, by the decision recorded in the README: no Entra app
     # registration. Sign-up and anonymous access stay off.
