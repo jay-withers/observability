@@ -16,11 +16,6 @@ resource "azurerm_container_app" "this" {
   }
 
   secret {
-    name  = "database-password"
-    value = random_password.database.result
-  }
-
-  secret {
     name  = "admin-password"
     value = random_password.admin.result
   }
@@ -39,7 +34,7 @@ resource "azurerm_container_app" "this" {
 
   template {
     # **Scale to zero.** Grafana is opened a few times a week; a standing
-    # replica would be the platform's second standing cost after Postgres. The
+    # replica would be the platform's only standing cost. The
     # price is a cold start of some seconds on the first page load. Alerting
     # lives in Azure Monitor, so nothing depends on Grafana being awake.
     min_replicas               = 0
@@ -68,18 +63,13 @@ resource "azurerm_container_app" "this" {
       }
 
       env {
-        name        = "GF_DATABASE_PASSWORD"
-        secret_name = "database-password"
-      }
-
-      env {
         name        = "GF_SECURITY_ADMIN_PASSWORD"
         secret_name = "admin-password"
       }
 
-      # /api/health checks Grafana's own database connection, so a broken
-      # Postgres login shows as an unhealthy revision rather than a login page
-      # that errors.
+      # /api/health checks Grafana's own database, so a SQLite file it cannot
+      # open shows as an unhealthy revision rather than a login page that
+      # errors.
       liveness_probe {
         transport               = "HTTP"
         port                    = local.target_port

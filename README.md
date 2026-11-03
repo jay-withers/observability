@@ -27,8 +27,11 @@ Later phases add app health and delivery.
 - **Grafana** runs as a scale-to-zero container app on the shared environment,
   in this repo's own resource group (`rg-observability-dev`). The first page
   load after an idle spell waits on a cold start.
-- **Its state** (users, preferences) is in the `grafana` database on the
-  platform's shared Postgres server, owned by azure-container-apps.
+- **Its state** is Grafana's default SQLite file on the replica's own disk,
+  so it starts empty on every new replica. Dashboards, the data source and the
+  admin password all come back from the image and the app's settings, so
+  only UI preferences are lost. No database server, so nothing bills while
+  it sleeps.
 - **What it reads** is the shared workspace, as its own managed identity
   (`Log Analytics Reader` on the workspace and nothing else).
 - **Dashboards and the data source are files in `grafana/`, baked into the
@@ -93,14 +96,9 @@ In order, once:
 4. **`make apply` locally** (as yourself, `az login` first). It creates the
    workspace role assignment, which is outside this project's resource group
    and so beyond the pipeline identity. The group itself comes from
-   github-repos (`create_resource_groups`, step 6), which must be applied
+   github-repos (`create_resource_groups`, step 5), which must be applied
    first.
-5. **`make db-role`.** Creates Grafana's `grafana` role on the shared server,
-   with the password from this state, and gives it the `grafana` database.
-   It needs `psql` and briefly opens a firewall rule for your public IP,
-   because the server only admits Azure IPs. Grafana reports unhealthy until
-   this has run.
-6. **github-repos**: add `deploy_resource_groups = ["rg-observability-dev"]`,
+5. **github-repos**: add `deploy_resource_groups = ["rg-observability-dev"]`,
    `create_resource_groups = true`, the `cae-platform-dev` join and
    `send_events = true` to this repo's `state_consumers` entry, and
    `make apply` there. (It was done in this order the first time, with a
@@ -142,7 +140,6 @@ make url              # Grafana's URL
 make dns              # the DNS records the custom domain needs
 make bind-domain      # finish binding the managed certificate after an apply
 make admin-password   # the admin password
-make db-role          # create or re-password Grafana's database role
 make expiry           # the TLS expiry rows schedule-expiry would record
 make sessions         # the session-resource rows schedule-session-resources would record
 make costs            # the Costs_CL rows schedule-costs would record
@@ -158,6 +155,5 @@ set) and replace the workspace ID with the placeholder before committing.
 ## Costs
 
 The container app scales to zero, so it bills only while someone has it open.
-Its database is on the platform's shared Postgres server, whose cost belongs to
-azure-container-apps. The scheduled checks run on GitHub-hosted runners and
+Its database is a SQLite file inside the container, so it has no cost of its own. The scheduled checks run on GitHub-hosted runners and
 add a few hundred rows a night to the workspace, inside its free grant.

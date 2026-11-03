@@ -14,9 +14,8 @@ observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
 traps.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
-shaped like gym-log: its own resource group and identity, the environment,
-workspace and Postgres server resolved by name or passed in, never by remote
-state.
+shaped like gym-log: its own resource group and identity, the environment
+and workspace resolved by name, never by remote state.
 
 ## Decisions not to re-litigate
 
@@ -28,14 +27,16 @@ state.
   `grafana/entrypoint.sh` at start-up. Grafana substitutes environment
   variables in provisioning YAML but not in dashboard JSON. Never commit a
   real workspace ID into a dashboard.
-- **Two passwords, both container app secrets from `random_password`**, never
-  Key Vault secrets: a Terraform-managed vault secret needs data-plane access
+- **The admin password is a container app secret from `random_password`**, never
+  a Key Vault secret: a Terraform-managed vault secret needs data-plane access
   just to plan, which the pipeline identity lacks (the estate's documented
   trap). No Key Vault exists here at all.
-- **Grafana's database login is a password** because Grafana cannot use an
-  Entra token for its own database. It is the only password-holding role on
-  the shared server. `sql/grafana-role.sql` creates it; `make db-role` runs
-  it as the Entra administrator.
+- **Grafana's state is its default SQLite file, on the replica's disk**, not
+  a database server: a Postgres B1ms bills every hour to keep a single admin
+  login. A new replica starts empty, which loses only UI preferences: the
+  dashboards and data source are provisioned, and `GF_SECURITY_ADMIN_PASSWORD`
+  sets the admin on every start. Don't move it to an Azure Files mount:
+  SQLite's locking over SMB is the documented way to corrupt it.
 - **One local admin, no Entra SSO** (no app registration). Sign-up and
   anonymous access are off.
 - **Created on dev-containers' `placeholder:latest`, never a release tag.**
@@ -59,15 +60,6 @@ state.
   the original from state. The `Log Analytics Reader` assignment on the
   platform's workspace is outside the group, so changing it is still a local
   apply.
-- **`postgres_fqdn` is copied, not derived.** The shared server's name has a
-  random suffix (it is a global DNS label). Take it from azure-container-apps'
-  `make outputs`.
-- **`make db-role` needs a firewall hole.** The server admits Azure IPs only
-  (`AllowAllAzureIps`); the target opens a rule for your public IP and removes
-  it on exit. Its SQL assumes the Entra administrator can act for the
-  database's owner, which held on a local Postgres 17 where the owner was a
-  role it belonged to. If `ALTER DATABASE` is refused on Azure, that
-  assumption is what broke.
 - **New GHCR packages start private.** Flip `observability/grafana` to public
   once after the first push; the app has no pull secret.
 - **`GF_SERVER_ROOT_URL` is computed**: the custom domain when

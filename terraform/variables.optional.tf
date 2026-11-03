@@ -18,7 +18,7 @@ variable "tags" {
 }
 
 variable "platform_resource_group_name" {
-  description = "Resource group holding the shared Container Apps environment, workspace and Postgres server (jay-withers/azure-container-apps)."
+  description = "Resource group holding the shared Container Apps environment and workspace (jay-withers/azure-container-apps)."
   type        = string
   default     = "rg-platform-dev"
 }
