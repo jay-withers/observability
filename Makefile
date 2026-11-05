@@ -9,7 +9,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password expiry sessions costs
+.PHONY: help install lint test init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password expiry sessions costs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -21,6 +21,9 @@ install: ## Install pre-commit hooks (run once after cloning)
 
 lint: ## Run all pre-commit hooks against every file
 	pre-commit run --all-files
+
+test: ## Test the check scripts against stubbed az, curl and openssl
+	tests/run.sh
 
 init: ## terraform init against ENV's backend
 	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl
