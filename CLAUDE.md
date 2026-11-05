@@ -86,6 +86,13 @@ and workspace resolved by name, never by remote state.
   each keeps its colour whatever the month's ranking. A new resource group
   falls into "landing zone and other" until it is added to the `case` in
   every panel that groups by area.
+- **The check scripts are tested in pre-commit, not a workflow.**
+  `tests/run.sh` (`make test`) runs each `tests/*.test.sh` against stub `az`,
+  `curl`, `openssl` and `sleep` written onto PATH, and the `script-tests` hook
+  runs it, so `pre-commit / Pre-commit` fails a PR that breaks a check. A
+  change to a check's jq or its retry, status or session rules needs a test
+  there. The KQL itself is not exercised; check it against the workspace.
+  `grafana/entrypoint.sh` is untested (fixed image paths, then `exec`).
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files
   before `make lint`, or terraform-docs, tflint and checkov never see them.
 

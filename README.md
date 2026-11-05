@@ -130,6 +130,7 @@ uses it.
 ```bash
 make install          # pre-commit hooks
 make lint             # every hook against every file
+make test             # the check scripts' tests (bash and jq, Azure stubbed out)
 make validate         # terraform init (no backend) + validate
 make plan             # terraform plan for dev
 make apply            # the first apply only; cd-terraform after that

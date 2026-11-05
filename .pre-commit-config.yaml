@@ -68,6 +68,18 @@ repos:
         language: script
         files: (^|/)Dockerfile$
 
+      # The check scripts' tests, the same run as `make test`. Here because
+      # `pre-commit / Pre-commit` is already required: a PR that breaks a
+      # check fails it, with no workflow of its own to add and require. Bash
+      # and jq only, both on the runner.
+      - id: script-tests
+        name: Test the check scripts
+        description: Runs tests/run.sh, which exercises scripts/check-*.sh and post-ops-events.sh against stubs.
+        entry: tests/run.sh
+        language: script
+        pass_filenames: false
+        files: ^(scripts|tests)/
+
       - id: check-tf-standards
         name: Check Terraform file layout standards
         description: "Fails if a locals/variable/output/data block isn't in a matching locals*.tf/variables*.tf/outputs*.tf/data*.tf file, or a terraform{}/provider{} block isn't in versions.tf."
