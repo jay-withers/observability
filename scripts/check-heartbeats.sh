@@ -27,7 +27,7 @@
 # (every root's drift, plus cost-feed, expiry and session here), `overdue`
 # when its newest row is over 36 hours old. A run that dies before it can post
 # (a failed login, a broken checkout) otherwise leaves nothing behind but a red
-# run: ops_events_silent can't see it while these hourly rows keep coming.
+# run: ops_events_silent can't see it while these daily rows keep coming.
 # Drift is tracked per root, the others per Kind. A root whose drift check is
 # removed reads `overdue` until it ages out of the 30 days, as a deleted job
 # does.
