@@ -14,10 +14,15 @@
 # subscription this is what the estate would cost on pay-as-you-go.
 # Subscription-level charges with no resource group read `(none)`.
 #
-# One query through `az rest`, following nextLink: Reader on the subscription
-# is enough to read costs. Cost Management throttles hard (a 429 on a second
-# run ten minutes after the first), so each page retries a 429 with a growing
-# wait, up to about five minutes in all. Any other error fails at once.
+# One query through curl, following nextLink: Reader on the subscription is
+# enough to read costs. Cost Management throttles hard, and a 429 can last
+# longer than five minutes (observability runs on 2026-11-04 and 11-06 were
+# refused for all of that), so a 429 waits as long as its retry-after headers
+# ask (the longest of the qpu, entity, tenant and plain ones), or 15, 30, 60,
+# 90, then 120s when it names none, up to COSTS_MAX_WAIT seconds of waiting in
+# all (default 1200). A wait that would pass that fails at once rather than
+# sleeping through the job, and so does any other error. curl rather than
+# `az rest`, which hides the headers.
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
@@ -43,22 +48,40 @@ body="$(jq -n --arg from "$from" --arg to "$to" '{
 }')"
 
 url="https://management.azure.com/subscriptions/$subscription/providers/Microsoft.CostManagement/query?api-version=2023-11-01"
+token="$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)"
+max_wait="${COSTS_MAX_WAIT:-1200}"
+fallback=(15 30 60 90 120)
+waited=0 throttles=0
+headers="$(mktemp)" response="$(mktemp)"
 pages=()
-err="$(mktemp)"
 while [[ -n "$url" ]]; do
-  for wait in 15 30 60 90 120 0; do
-    if page="$(az rest --method post --url "$url" --body "$body" 2>"$err")"; then
-      break
-    fi
-    if ! grep -q 'Too Many Requests' "$err" || (( wait == 0 )); then
-      cat "$err" >&2
+  while :; do
+    code="$(curl -sS -D "$headers" -o "$response" -w '%{http_code}' -X POST "$url" \
+      -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+      --data "$body")"
+    [[ "$code" == 200 ]] && break
+    if [[ "$code" != 429 ]]; then
+      echo "check-costs: HTTP $code: $(cat "$response")" >&2
       exit 1
     fi
-    echo "check-costs: throttled, retrying in ${wait}s." >&2
-    sleep "$wait"
+    # Every retry-after header in seconds; an HTTP-date one is ignored.
+    delay="$(tr -d '\r' <"$headers" \
+      | sed -nE 's/^(x-ms-ratelimit-microsoft\.costmanagement-[a-z]+-)?retry-after: *([0-9]+) *$/\2/Ip' \
+      | sort -n | tail -1)"
+    if [[ -z "$delay" ]]; then
+      i=$((throttles < ${#fallback[@]} ? throttles : ${#fallback[@]} - 1))
+      delay="${fallback[$i]}"
+    fi
+    if ((waited + delay > max_wait)); then
+      echo "check-costs: still throttled after ${waited}s of waiting; a further ${delay}s would pass ${max_wait}s. $(cat "$response")" >&2
+      exit 1
+    fi
+    echo "check-costs: throttled, retrying in ${delay}s." >&2
+    sleep "$delay"
+    waited=$((waited + delay)) throttles=$((throttles + 1))
   done
-  pages+=("$page")
-  url="$(jq -r '.properties.nextLink // empty' <<<"$page")"
+  pages+=("$(cat "$response")")
+  url="$(jq -r '.properties.nextLink // empty' "$response")"
 done
 
 time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
