@@ -1,13 +1,19 @@
 name: schedule-heartbeats
 
-# Hourly: is every Container Apps job on the shared environment still running
+# Daily: is every Container Apps job on the shared environment still running
 # on schedule? scripts/check-heartbeats.sh learns each job's cadence from 30
 # days of ContainerAppSystemLogs_CL and records one OpsEvents_CL `heartbeat`
 # row per job (`ok` or `overdue`), plus one for Deployments_CL and one per
 # daily check that writes OpsEvents_CL (drift per root, cost-feed, expiry,
 # session), so a check that dies before posting goes `overdue`. The platform's
-# `ops_event_bad` alert fires on `overdue`; `ops_events_silent` fires if these
-# hourly rows stop, which is what catches this workflow itself dying.
+# `ops_event_bad` alert fires on `overdue`; `ops_events_silent` fires if
+# OpsEvents_CL gets nothing for two days, which is what catches this workflow
+# and the other checks dying.
+#
+# Daily, not hourly: GitHub starts scheduled runs five to eight hours late and
+# dropped most hourly ones (four a day at best in early November 2026), so an
+# hourly cron bought nothing but false `ops_events_silent` alerts. A stopped
+# job is reported within about a day.
 #
 # Here rather than as an Azure Monitor rule because a log alert can look back
 # at most two days, and a weekly job's cadence needs weeks of history. Runs in
@@ -15,7 +21,7 @@ name: schedule-heartbeats
 # `send_events` lets it post.
 on:
   schedule:
-    - cron: "23 * * * *"
+    - cron: "37 5 * * *"
   workflow_dispatch:
 
 permissions:

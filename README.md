@@ -44,7 +44,7 @@ Later phases add app health and delivery.
   per host, which doesn't wake a scale-to-zero app) and records one
   `OpsEvents_CL` row per host. `make expiry` prints the same rows locally. Add
   a host to the file when a custom domain is bound.
-- **Job heartbeats are computed here, hourly.** `schedule-heartbeats.yml` runs
+- **Job heartbeats are computed here, daily.** `schedule-heartbeats.yml` runs
   `scripts/check-heartbeats.sh`, which learns each job's cadence from 30 days
   of `ContainerAppSystemLogs_CL` (no job list to maintain) and records one
   `heartbeat` row per job: `overdue` once its last success is older than 1.5x

@@ -108,7 +108,7 @@
       "id": 2,
       "type": "stat",
       "title": "Jobs overdue",
-      "description": "Container Apps jobs whose last successful run is older than 1.5x their longest normal gap, and daily checks (check: rows) with no row for 36 hours (observability's hourly heartbeat check).",
+      "description": "Container Apps jobs whose last successful run is older than 1.5x their longest normal gap, and daily checks (check: rows) with no row for 36 hours (observability's daily heartbeat check).",
       "datasource": {
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
@@ -128,7 +128,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "OpsEvents_CL\n| where TimeGenerated > ago(3h)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| where Status == \"overdue\"\n| count",
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| where Status == \"overdue\"\n| count",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],
@@ -306,7 +306,7 @@
       "id": 5,
       "type": "table",
       "title": "Jobs",
-      "description": "Latest heartbeat per Container Apps job, from observability's hourly check. Cadence is learned from 30 days of system logs, so there is no job list to keep up to date. check: rows are the daily OpsEvents_CL checks, overdue after 36 hours without a row.",
+      "description": "Latest heartbeat per Container Apps job, from observability's daily check. Cadence is learned from 30 days of system logs, so there is no job list to keep up to date. check: rows are the daily OpsEvents_CL checks, overdue after 36 hours without a row.",
       "datasource": {
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
@@ -326,7 +326,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "OpsEvents_CL\n| where TimeGenerated > ago(3h)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],

@@ -7,3 +7,13 @@
 # OAuth sign-in, and both are off here: one local admin, no SSO. Drop this
 # entry once a Grafana release bumps go-jose.
 CVE-2026-116587 exp:2026-12-31
+
+# golang.org/x/net/html: denial of service from crafted HTML input. Compiled
+# into Grafana's own binary (13.2.5 ships v0.61.0) and its bundled Prometheus
+# plugin (v0.60.0); fixed in 0.62.0, so only a Grafana release can fix it, and
+# 13.2.5 is the newest 13.2. The Prometheus data source isn't configured here
+# (Azure Monitor only), and the binary's HTML parsing sits behind the single
+# admin login: the worst case is a crashed scale-to-zero replica. Short expiry,
+# because it is reachable in principle: drop this entry once a Grafana release
+# bumps x/net. Accepted by the user on 2026-11-06.
+CVE-2026-78661 exp:2026-12-06
