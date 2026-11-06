@@ -22,6 +22,8 @@ permissions:
 jobs:
   costs:
     runs-on: ubuntu-latest
+    # check-costs.sh waits up to 20 minutes out a Cost Management throttle.
+    timeout-minutes: 30
     environment: dev
     permissions:
       id-token: write
