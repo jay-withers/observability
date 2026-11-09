@@ -125,7 +125,59 @@ root URL moves to the domain in the same apply, so its links point there.
 The default `*.azurecontainerapps.io` URL keeps working, and the smoke test
 uses it.
 
-## Commands
+## Grafana Cloud
+
+The same dashboards are moving to a free Grafana Cloud stack, which is always
+on, so there is no cold start. Log Analytics stays the data source and Azure
+Monitor keeps the alerting. Only where Grafana runs changes. While both exist,
+the container app above is the fallback. Retiring it (the app, image, custom
+domain and its Cloudflare records) is a separate change, once the stack is
+confirmed working.
+
+`cd-grafana-cloud.yml` runs `scripts/sync-grafana-cloud.sh` on every merge
+that touches `grafana/dashboards/`, and on demand. It writes the
+`azure-monitor` data source, the Platform folder and every dashboard through
+the stack's API, and deletes any dashboard in that folder that git no longer
+has. The UI does not lock dashboards: an edit made there is overwritten by
+the next run, so change the JSON here.
+
+Grafana Cloud runs outside Azure and cannot use a managed identity, so it
+reads the workspace as an **app registration with a client secret**. That is
+the one secret this setup adds, and it expires (see step 3).
+
+Set up once, in order:
+
+1. **Create the stack.** Sign up at grafana.com (free tier) and create a stack,
+   e.g. `https://jaywithers.grafana.net`. In the stack, go to Administration →
+   Users and access → Service accounts and add one with role **Admin**
+   (Editor cannot write data sources). Then create a token for it.
+2. **Create the app registration** that the stack reads Log Analytics as
+   (`az login` first, as someone who can create app registrations):
+
+   ```bash
+   app=$(az ad app create --display-name grafana-cloud-observability --query appId -o tsv)
+   az ad sp create --id "$app"
+   az role assignment create --assignee "$app" --role "Log Analytics Reader" \
+     --scope "$(az monitor log-analytics workspace show -g rg-platform-dev -n log-platform-dev --query id -o tsv)"
+   ```
+
+3. **Store the settings on the `dev` environment.** The secrets go through a
+   pipe, never onto the command line or the screen:
+
+   ```bash
+   R=jay-withers/observability
+   gh variable set GRAFANA_URL --env dev -R $R --body https://jaywithers.grafana.net
+   gh variable set GRAFANA_AZURE_CLIENT_ID --env dev -R $R --body "$app"
+   az ad app credential reset --id "$app" --display-name grafana-cloud --years 1 \
+     --query password -o tsv | gh secret set GRAFANA_AZURE_CLIENT_SECRET --env dev -R $R
+   gh secret set GRAFANA_TOKEN --env dev -R $R   # paste the token from step 1
+   ```
+
+   The client secret lasts a year. To renew it, rerun the `credential reset`
+   line, then run the workflow again.
+4. **Run `cd-grafana-cloud`** from the Actions tab, then open
+   *Dashboards → Platform* on the stack.
+
 
 ```bash
 make install          # pre-commit hooks

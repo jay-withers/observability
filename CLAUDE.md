@@ -39,6 +39,17 @@ and workspace resolved by name, never by remote state.
   SQLite's locking over SMB is the documented way to corrupt it.
 - **One local admin, no Entra SSO** (no app registration). Sign-up and
   anonymous access are off.
+- **Moving to Grafana Cloud** (README, "Grafana Cloud") to remove the cold
+  start. Log Analytics stays the data source and Azure Monitor keeps
+  alerting. The stack is configured by `scripts/sync-grafana-cloud.sh` through
+  its API, not by the Grafana Terraform provider: this root plans in CI as
+  the Azure identity, and the provider would add a Grafana token to every
+  plan for no benefit. The stack reads the workspace as an app registration
+  with a client secret, created by hand (README), because Grafana Cloud
+  cannot use a managed identity and the pipeline identity cannot create app
+  registrations. This is a deliberate exception to "no app registration".
+  The container app above stays until the stack is verified, and is retired
+  in a separate change.
 - **Created on dev-containers' `placeholder:latest`, never a release tag.**
   Terraform needs an image before any release exists; a guessed tag (v0.0.1
   vs v0.1.0, observability#4) passes plan and apply and fails only on the
@@ -119,6 +130,9 @@ SHA with the tag as a comment, the same set gym-log uses:
 - `ci-container-build`: builds `grafana/` behind the `container-build` gate.
 - `cd-tag` → `cd-publish` (when `grafana/` changed) → `container-apps-deploy`.
 - `cd-terraform`: plans dev on merge; applies when run by hand.
+- `cd-grafana-cloud`: syncs `grafana/dashboards/` and the data source to the
+  Grafana Cloud stack on merge and on demand. Skips with a notice while
+  `GRAFANA_URL` is unset on `dev`. It is tested in `tests/sync-grafana-cloud.test.sh`.
 
 Required checks are set in github-repos. Only `pre-commit / Pre-commit` and
 `terraform / Terraform` are required until the rest report reliably.

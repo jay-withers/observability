@@ -1,0 +1,50 @@
+name: cd-grafana-cloud
+
+# Pushes the data source and dashboards in grafana/ to the Grafana Cloud stack
+# (scripts/sync-grafana-cloud.sh) on every merge that changes them, and on
+# demand. Git stays the source of truth: dashboards removed here are deleted
+# there, and edits made in the UI are overwritten by the next run.
+#
+# Runs in `dev` for its variables and secrets (see README, "Grafana Cloud").
+# Until GRAFANA_URL is set there, it skips with a notice instead of failing.
+# No Azure login: the stack reads Log Analytics as its own app registration.
+on:
+  push:
+    branches: [main]
+    paths:
+      - grafana/dashboards/**
+      - scripts/sync-grafana-cloud.sh
+      - .github/workflows/cd-grafana-cloud.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-grafana-cloud
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Not configured yet
+        if: vars.GRAFANA_URL == ''
+        run: echo "::notice::GRAFANA_URL is not set on the dev environment; nothing to sync. See README, Grafana Cloud."
+
+      - name: Sync dashboards
+        if: vars.GRAFANA_URL != ''
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          GRAFANA_AZURE_CLIENT_ID: ${{ vars.GRAFANA_AZURE_CLIENT_ID }}
+          GRAFANA_AZURE_CLIENT_SECRET: ${{ secrets.GRAFANA_AZURE_CLIENT_SECRET }}
+        run: |
+          scripts/sync-grafana-cloud.sh 2>&1 | tee "$RUNNER_TEMP/sync.log"
+          { echo '```'; cat "$RUNNER_TEMP/sync.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
