@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # Grafana with this repo's data source and dashboards baked in, so what the UI
 # shows is exactly what is in git: provisioned dashboards are read-only there,
