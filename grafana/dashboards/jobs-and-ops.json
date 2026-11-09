@@ -306,7 +306,7 @@
       "id": 5,
       "type": "table",
       "title": "Jobs",
-      "description": "Latest heartbeat per Container Apps job, from observability's daily check. Cadence is learned from 30 days of system logs, so there is no job list to keep up to date. check: rows are the daily OpsEvents_CL checks, overdue after 36 hours without a row.",
+      "description": "Latest heartbeat per Container Apps job, from observability's daily check. Cadence is learned from 30 days of system logs, so there is no job list to keep up to date. check: rows are the daily OpsEvents_CL checks, overdue after 36 hours without a row. removed: a job that no longer exists, listed until it ages out of the 30 days.",
       "datasource": {
         "type": "grafana-azure-monitor-datasource",
         "uid": "azure-monitor"
@@ -326,7 +326,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"heartbeat\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status in (\"ok\", \"removed\") asc, Status == \"removed\" asc, Name asc",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],
@@ -380,6 +380,10 @@
                       "failed": {
                         "color": "red",
                         "index": 4
+                      },
+                      "removed": {
+                        "color": "text",
+                        "index": 5
                       }
                     }
                   }
@@ -546,7 +550,7 @@
           },
           "queryType": "Azure Log Analytics",
           "azureLogAnalytics": {
-            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"drift\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status == \"ok\" asc, Name asc",
+            "query": "OpsEvents_CL\n| where TimeGenerated > ago(2d)\n| where Kind == \"drift\" and Environment == \"$environment\"\n| summarize arg_max(TimeGenerated, Status, Detail, RunUrl, Repo) by Name\n| project Name, Status, Detail, Checked = TimeGenerated, RunUrl\n| order by Status in (\"ok\", \"removed\") asc, Status == \"removed\" asc, Name asc",
             "resources": [
               "__WORKSPACE_RESOURCE_ID__"
             ],

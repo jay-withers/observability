@@ -3,7 +3,7 @@
 # still running on schedule, and prints one OpsEvents_CL `heartbeat` row per
 # job as a JSON array, for schedule-heartbeats.yml to post:
 #
-#   check-heartbeats.sh <workspace-customer-id> [run-url]
+#   check-heartbeats.sh <workspace-customer-id> <subscription-id> [run-url]
 #
 # No job list to maintain: each job's cadence is learned from 30 days of
 # ContainerAppSystemLogs_CL. A job is `overdue` when its last successful run
@@ -17,8 +17,12 @@
 #     successful, like the old `caj-*-dev` names from early October, is
 #     ignored rather than reported overdue for a month.
 #   - An irregular job is caught only after its longest normal gap, 1.5x.
-#   - A deliberately deleted job reads `overdue` until it ages out of the
-#     30 days. Its alert is one email (auto-mitigated rules don't repeat).
+#   - A deliberately deleted job reads `removed`, not `overdue`, until it
+#     ages out of the 30 days: the jobs that still exist are listed from
+#     Resource Graph first. It still gets a row, rather than none, so its
+#     latest row stops being the last `overdue` one and the alert clears (the
+#     same reason the session check posts `ok` rows). An empty list fails the
+#     run instead of marking every job `removed`.
 #
 # Also one `heartbeat` row for Deployments_CL itself, `overdue` after 14 days
 # with no deploy at all, so a broken deploy event can't pass for a quiet week.
@@ -32,15 +36,27 @@
 # removed reads `overdue` until it ages out of the 30 days, as a deleted job
 # does.
 #
-# The workspace is read with `az rest` against the Log Analytics query API;
-# the caller's identity needs read on the workspace (Reader is enough).
+# The workspace is read with `az rest` against the Log Analytics query API,
+# and the live jobs from Resource Graph: the caller's identity needs Reader
+# on the subscription (read on the workspace alone isn't enough).
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <workspace-customer-id> [run-url]" >&2
+if [[ $# -lt 2 ]]; then
+  echo "usage: $0 <workspace-customer-id> <subscription-id> [run-url]" >&2
   exit 2
 fi
-workspace="$1" run_url="${2:-}"
+workspace="$1" subscription="$2" run_url="${3:-}"
+
+graph="$(jq -n --arg s "$subscription" '{subscriptions: [$s],
+  query: "resources | where type =~ \"microsoft.app/jobs\" | project name",
+  options: {resultFormat: "objectArray", "$top": 1000}}')"
+live="$(az rest --method post \
+  --url "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01" \
+  --body "$graph" | jq -c '[.data[].name]')"
+if [[ "$live" == "[]" ]]; then
+  echo "Resource Graph lists no Container Apps jobs in $subscription; refusing to mark every job removed" >&2
+  exit 1
+fi
 
 read -r -d '' query <<'KQL' || true
 let starts = ContainerAppSystemLogs_CL
@@ -56,10 +72,14 @@ let jobs = ContainerAppSystemLogs_CL
   | where completions >= 2
   | join kind=inner gaps on JobName_s
   | extend allowed = max_of(coalesce(maxgap, 0s) * 1.5, 2h)
+  | extend removed = JobName_s !in~ (live)
   | project Name = JobName_s,
-      Status = iff(now() - lastok > allowed, "overdue", "ok"),
-      Detail = strcat("Last success ", format_datetime(lastok, "yyyy-MM-dd HH:mm"),
-        " UTC. Overdue after ", round(allowed / 1h, 1), "h (1.5x its longest gap in 30 days, at least 2h).");
+      Status = case(removed, "removed", now() - lastok > allowed, "overdue", "ok"),
+      Detail = iff(removed,
+        strcat("No longer exists. Last success ", format_datetime(lastok, "yyyy-MM-dd HH:mm"),
+          " UTC; listed until it ages out of 30 days of logs."),
+        strcat("Last success ", format_datetime(lastok, "yyyy-MM-dd HH:mm"),
+          " UTC. Overdue after ", round(allowed / 1h, 1), "h (1.5x its longest gap in 30 days, at least 2h)."));
 let deploys = Deployments_CL
   | summarize lastdeploy = max(TimeGenerated)
   | project Name = "Deployments_CL",
@@ -78,7 +98,8 @@ union jobs, deploys, checks
 | order by Name asc
 KQL
 
-body="$(jq -n --arg q "$query" '{query: $q, timespan: "P30D"}')"
+# The live names go in as a KQL dynamic literal: JSON is valid there.
+body="$(jq -n --arg q "let live = dynamic($live);"$'\n'"$query" '{query: $q, timespan: "P30D"}')"
 result="$(az rest --method post \
   --url "https://api.loganalytics.io/v1/workspaces/$workspace/query" \
   --resource https://api.loganalytics.io --body "$body")"
