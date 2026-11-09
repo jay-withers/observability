@@ -3,7 +3,8 @@ name: schedule-heartbeats
 # Daily: is every Container Apps job on the shared environment still running
 # on schedule? scripts/check-heartbeats.sh learns each job's cadence from 30
 # days of ContainerAppSystemLogs_CL and records one OpsEvents_CL `heartbeat`
-# row per job (`ok` or `overdue`), plus one for Deployments_CL and one per
+# row per job (`ok`, `overdue`, or `removed` once the job no longer exists),
+# plus one for Deployments_CL and one per
 # daily check that writes OpsEvents_CL (drift per root, cost-feed, expiry,
 # session), so a check that dies before posting goes `overdue`. The platform's
 # `ops_event_bad` alert fires on `overdue`; `ops_events_silent` fires if
@@ -48,11 +49,12 @@ jobs:
       # and platform_resource_group_name in terraform/.
       - name: Check jobs
         env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           workspace="$(az resource show -g rg-platform-dev -n log-platform-dev \
             --resource-type Microsoft.OperationalInsights/workspaces --query properties.customerId -o tsv)"
-          scripts/check-heartbeats.sh "$workspace" "$RUN_URL" > "$RUNNER_TEMP/rows.json"
+          scripts/check-heartbeats.sh "$workspace" "$AZURE_SUBSCRIPTION_ID" "$RUN_URL" > "$RUNNER_TEMP/rows.json"
 
       - name: Record the heartbeat events
         env:

@@ -48,7 +48,8 @@ Later phases add app health and delivery.
   `scripts/check-heartbeats.sh`, which learns each job's cadence from 30 days
   of `ContainerAppSystemLogs_CL` (no job list to maintain) and records one
   `heartbeat` row per job: `overdue` once its last success is older than 1.5x
-  its longest normal gap. A log alert can look back only two days, too short
+  its longest normal gap, or `removed` once Resource Graph no longer lists
+  the job, so a deliberately deleted one doesn't alert. A log alert can look back only two days, too short
   for a weekly job, which is why this isn't an Azure Monitor rule. It also
   records a `check:` heartbeat for each daily check that writes `OpsEvents_CL`
   (each root's drift, cost-feed, expiry, session), `overdue` after 36 hours
