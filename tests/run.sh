@@ -6,7 +6,7 @@
 #   tests/run.sh          (or `make test`; pre-commit runs it too)
 #
 # No framework to install: bash and jq, which the scripts need anyway, so the
-# same run works in the dev container and on the pre-commit runner.
+# same run works locally (jq from mise.toml) and on the pre-commit runner.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
