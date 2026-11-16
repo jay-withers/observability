@@ -7,7 +7,7 @@
 # Baked into the image rather than applied with the Grafana Terraform
 # provider, because that provider has to reach a running Grafana at plan time,
 # and this one is created by the same apply and scales to zero.
-FROM grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205
+FROM grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
 
 # Links the pushed package to this repository, which is what gives the
 # publishing workflow's GITHUB_TOKEN write access to it.
