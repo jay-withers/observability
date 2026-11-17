@@ -13,6 +13,12 @@ observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
 `README.md` covers the why and the first-time setup; this file covers the
 traps.
 
+**Grafana is being replaced by obsview** (`app/`, README "obsview"), a
+FastAPI app in gym-log's shape. Step 1 (the app and its Deployments view) is
+built and published but not deployed; the container app still runs Grafana
+until the Terraform cutover. Don't add Grafana dashboards: add the view to
+obsview.
+
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
 shaped like gym-log: its own resource group and identity, the environment
 and workspace resolved by name, never by remote state.
@@ -71,8 +77,9 @@ and workspace resolved by name, never by remote state.
   the original from state. The `Log Analytics Reader` assignment on the
   platform's workspace is outside the group, so changing it is still a local
   apply.
-- **New GHCR packages start private.** Flip `observability/grafana` to public
-  once after the first push; the app has no pull secret.
+- **New GHCR packages start private.** Flip `observability/grafana` (and
+  `observability/obsview`, after its first publish) to public once after the
+  first push; the app has no pull secret.
 - **`GF_SERVER_ROOT_URL` is computed**: the custom domain when
   `custom_domain_name` is set, otherwise the app's name under the
   environment's default domain, because the FQDN is not known until the app
@@ -107,6 +114,29 @@ and workspace resolved by name, never by remote state.
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files
   before `make lint`, or terraform-docs, tflint and checkov never see them.
 
+## obsview (`app/`)
+
+- **A view is one query for raw rows plus a pure function over them**
+  (`deployments.kql`/`window`/`build`). Put the arithmetic in Python with a
+  test, not in KQL. The window goes in as the query's `timespan`, never
+  interpolated; the only interpolated value is `ENVIRONMENT`, which
+  `Settings` holds to a slug.
+- **ECharts is fetched by the Dockerfile with `--checksum`**, never
+  committed (it is over the 500 KB hook) and never loaded from a CDN (the
+  CSP is `script-src 'self'`). Its URL and hash live only on the Dockerfile's
+  `ADD` line; `make app-vendor` reads them from there. Renovate does not see
+  it.
+- **Chart colours come from CSS tokens** in `static/app.css`, which
+  `static/app.js` reads at draw time; light and dark are each their own
+  steps. Outcomes use the status colours, triggers a fixed colour per name
+  (never by rank). No inline `<script>` that executes: the chart payload is
+  a `type="application/json"` block, and `headers.py` (copied verbatim from
+  gym-log, keep it identical) sets the CSP.
+- **No `WORKSPACE_ID` means demo data** (`demo.py`), under a banner, so
+  `make app-run` and the route tests need no Azure.
+- **No Key Vault**, as for Grafana: the passcode is a container app secret
+  in `APP_PASSCODE` (added in the Terraform cutover).
+
 ## Terraform layout
 
 `terraform/` is a deployable root configuration with a partial `azurerm`
@@ -127,8 +157,13 @@ SHA with the tag as a comment, the same set gym-log uses:
 - `ci-terraform`: validate (`terraform / Terraform`), and a dev plan behind the
   always-reporting `terraform-plan` gate. The plan fails until the identity has
   Reader, i.e. until github-repos gives this repo `deploy_resource_groups`.
-- `ci-container-build`: builds `grafana/` behind the `container-build` gate.
-- `cd-tag` → `cd-publish` (when `grafana/` changed) → `container-apps-deploy`.
+- `ci-python`: obsview's pytest, mypy and coverage from `app/` (not yet
+  required).
+- `ci-container-build`: builds `grafana/` and `app/` (image `obsview`)
+  behind the `container-build` gate.
+- `cd-tag` → `cd-publish` (when `grafana/` or `app/` changed) →
+  `container-apps-deploy`. Both images are published; the deploy still rolls
+  Grafana until the cutover.
 - `cd-terraform`: plans dev on merge; applies when run by hand.
 - `cd-grafana-cloud`: syncs `grafana/dashboards/` and the data source to the
   Grafana Cloud stack on merge and on demand. Skips with a notice while

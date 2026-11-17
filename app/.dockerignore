@@ -1,0 +1,7 @@
+# The image needs pyproject.toml, uv.lock and src/ only. Everything else stays
+# out of the build context, above all .env, which holds the local passcode.
+*
+!pyproject.toml
+!uv.lock
+!src/
+**/__pycache__

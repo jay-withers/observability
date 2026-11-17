@@ -1,0 +1,76 @@
+[project]
+name = "obsview"
+version = "0.1.0"
+description = "Phone-first dashboards over the estate's Log Analytics tables"
+requires-python = ">=3.12"
+
+# Server-rendered FastAPI, the same shape as gym-log. The charts are drawn in
+# the browser by ECharts, which the image fetches at build time (see the
+# Dockerfile); nothing here needs a JavaScript build step.
+dependencies = [
+  "pydantic>=2.9",
+  "pydantic-settings>=2.5",
+  "python-dotenv>=1.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "jinja2>=3.1",
+  # FastAPI's Form() parsing needs it, and the failure without it is a 500 at
+  # the first login rather than anything at import time.
+  "python-multipart>=0.0.20",
+  "azure-identity>=1.19",
+  "azure-monitor-query>=1.4",
+]
+
+[project.optional-dependencies]
+# httpx2, not httpx: starlette's TestClient deprecated the latter, and with
+# `filterwarnings = ["error"]` below that deprecation fails collection outright.
+dev = ["pytest>=8.3", "ruff>=0.8", "httpx2>=0.28", "mypy>=2.4.1"]
+
+# What the Dockerfile's ENTRYPOINT resolves to. Terraform sets no `command`
+# (gym-log's outage), so this name lives in exactly one place.
+[project.scripts]
+obsview = "obsview.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/obsview"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "S"]
+# The en dash is display text ("–" for no value, "5–10m"), not a typo.
+allowed-confusables = ["–"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+  "fastapi.Cookie", "fastapi.Depends", "fastapi.Form", "fastapi.Query",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S104", "S105", "S106", "S311"]
+# The demo source is fake data by definition: `random` is the point.
+"src/obsview/demo.py" = ["S311"]
+
+[tool.mypy]
+files = ["src", "tests"]
+check_untyped_defs = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "error",
+  # Raised inside starlette's own TestClient import (as in gym-log).
+  "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated:DeprecationWarning",
+]
