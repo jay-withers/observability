@@ -107,7 +107,7 @@ In order, once:
    applies, cd-publish deploys, and every deploy is recorded like any app's.
    Re-run the failed deploy from step 2 (or `make deploy IMAGE_TAG=<release>`)
    to replace the placeholder with Grafana.
-7. **`make url`**, sign in, open *Platform → Deployments*.
+6. **`make url`**, sign in, open *Platform → Deployments*.
 
 ## The custom domain
 
@@ -179,16 +179,22 @@ Set up once, in order:
 4. **Run `cd-grafana-cloud`** from the Actions tab, then open
    *Dashboards → Platform* on the stack.
 
+## Commands
 
 ```bash
-make install          # pre-commit hooks
+make install          # mise tools and pre-commit hooks
 make lint             # every hook against every file
 make test             # the check scripts' tests (bash and jq, Azure stubbed out)
 make validate         # terraform init (no backend) + validate
+make init             # terraform init against dev's backend
+make fmt              # terraform fmt -recursive
 make plan             # terraform plan for dev
-make apply            # the first apply only; cd-terraform after that
+make apply            # the first apply, and custom-domain changes; cd-terraform otherwise
+make outputs          # this deployment's outputs
 make build            # build the Grafana image for linux/amd64
+make push             # push it to ghcr.io (needs write:packages)
 make deploy IMAGE_TAG=vX.Y.Z
+make deployed-tag     # the image tag live on Grafana
 make smoke IMAGE_TAG=vX.Y.Z
 make url              # Grafana's URL
 make dns              # the DNS records the custom domain needs
@@ -198,6 +204,28 @@ make expiry           # the TLS expiry rows schedule-expiry would record
 make sessions         # the session-resource rows schedule-session-resources would record
 make costs            # the Costs_CL rows schedule-costs would record
 ```
+
+## CI/CD
+
+Every workflow calls a shared one in
+[jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
+SHA, apart from the scheduled checks and `cd-grafana-cloud`, which run this
+repo's scripts.
+
+- **ci-pre-commit**, **ci-container-build** (build plus Trivy) and
+  **ci-terraform** (validate, then a real plan of dev on the PR) on pull
+  requests. **ci-codeql** scans the workflows.
+- **cd-tag** → **cd-publish**: a release on every merge, publishing
+  `ghcr.io/jay-withers/observability/grafana` and deploying it with a smoke
+  test and rollback, like any app.
+- **cd-terraform**: plans dev on merge and opens a `terraform-pending` issue;
+  run it by hand to apply.
+- **cd-grafana-cloud**: syncs the dashboards to Grafana Cloud (above).
+- **schedule-expiry**, **schedule-heartbeats**, **schedule-session-resources**
+  and **schedule-costs**: the nightly and daily checks described in
+  [How it fits together](#how-it-fits-together). Each can also be run by hand.
+- **schedule-drift**: a nightly plan of dev, recorded in `OpsEvents_CL`.
+- **manual-terraform-unlock**: releases a stuck state lock.
 
 ## Changing a dashboard
 
