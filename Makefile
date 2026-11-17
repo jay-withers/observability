@@ -9,22 +9,53 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password expiry sessions costs
+.PHONY: help install lint test app-test app-vendor app-run app-build init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password expiry sessions costs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install mise tools and pre-commit hooks (run once after cloning)
+install: ## Install mise tools, pre-commit hooks and the app's Python dependencies
 	mise install
 	pre-commit install
 	pre-commit install --hook-type commit-msg
+	cd app && uv sync --extra dev
 
 lint: ## Run all pre-commit hooks against every file
 	pre-commit run --all-files
 
-test: ## Test the check scripts against stubbed az, curl and openssl
+test: app-test ## Test the check scripts (stubbed az, curl, openssl) and the app
 	tests/run.sh
+
+# --extra dev: pytest is an extra, so `uv run` alone would not install it.
+app-test: ## Test and type-check the obsview app (app/)
+	cd app && uv run --extra dev pytest -q
+	cd app && uv run --extra dev mypy
+
+# The chart library is not committed (over the large-file limit). Its URL and
+# hash are read from app/Dockerfile's ADD, so the image and `make app-run`
+# cannot serve different files.
+ECHARTS_URL = $(shell grep -o 'https://cdn.jsdelivr.net/npm/echarts@[^ ]*' app/Dockerfile)
+ECHARTS_SHA256 = $(shell grep -o 'checksum=sha256:[0-9a-f]*' app/Dockerfile | cut -d: -f2)
+
+app-vendor: ## Fetch the pinned chart library (as app/Dockerfile pins it) into app/vendor
+	@test -n "$(ECHARTS_URL)" && test -n "$(ECHARTS_SHA256)" || \
+		{ echo "error: no echarts ADD --checksum line in app/Dockerfile" >&2; exit 1; }
+	mkdir -p app/vendor
+	curl -fsSL -o app/vendor/echarts.min.js $(ECHARTS_URL)
+	echo "$(ECHARTS_SHA256)  app/vendor/echarts.min.js" | sha256sum -c -
+
+# No WORKSPACE_ID means demo data, so this works with no Azure at all. Set
+# WORKSPACE_ID (the workspace's customer ID) in app/.env, after `az login`,
+# to read the real tables as yourself.
+PORT ?= 8000
+app-run: ## Serve the app on PORT (demo data unless app/.env sets WORKSPACE_ID)
+	@test -f app/vendor/echarts.min.js || $(MAKE) app-vendor
+	cd app && APP_PASSCODE=$${APP_PASSCODE:-local} uv run obsview serve --reload --port $(PORT)
+
+app-build: ## Build the obsview image for linux/amd64
+	docker buildx build --platform linux/amd64 --load \
+		-t $(IMAGE_REGISTRY)/obsview:$(IMAGE_TAG) app
 
 init: ## terraform init against ENV's backend
 	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl

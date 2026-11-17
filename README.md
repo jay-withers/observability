@@ -22,6 +22,45 @@ Three dashboards so far:
 
 Later phases add app health and delivery.
 
+## obsview: the replacement for Grafana
+
+`app/` is **obsview**, a small FastAPI app that is replacing Grafana: the
+same tables, with charts designed for them, phone-first, and no cold start
+once it runs with a warm replica. It is being built in steps:
+
+1. **The app and the Deployments view** (this change): KPI tiles with
+   sparklines and deltas against the previous period, outcomes per day, a
+   per-app deploy timeline, a 13-week activity calendar, lead-time
+   distribution, per-app cards and the recent deploys. Built and published as
+   `ghcr.io/jay-withers/observability/obsview`; nothing runs it yet.
+2. Terraform points the container app at it (a `terraform-pending` apply).
+3. Jobs and ops, and Costs.
+4. Grafana, its image and the Grafana Cloud sync are removed.
+
+How it works:
+
+- **One query per view.** It fetches the raw rows for the range (and the one
+  before it, for the deltas) and computes every tile and chart in Python
+  (`app/src/obsview/deployments.py`), so the arithmetic is unit-tested
+  rather than living in panel KQL. Results are cached in memory for five
+  minutes, and the default view is fetched at start-up.
+- **It reads the workspace as the container app's own identity**
+  (`Log Analytics Reader`, already granted), by `WORKSPACE_ID`, the
+  workspace's customer ID.
+- **Charts are ECharts**, served from the image. The image fetches it at
+  build time with a pinned SHA-256 (`app/Dockerfile`), because the file is
+  over the repo's 500 KB limit and a CDN would need the CSP opened to it.
+  Tiles and sparklines are plain HTML and SVG, drawn server-side.
+- **A passcode gate**, the same signed-cookie scheme as gym-log, from
+  `APP_PASSCODE`.
+
+Run it locally with `make app-run` (add `PORT=` if 8000 is taken). With no
+`WORKSPACE_ID` it serves generated demo data under a banner. Put
+`WORKSPACE_ID=<customer id>` in `app/.env` after `az login` to read the real
+tables as yourself. The passcode is `local` unless `APP_PASSCODE` says
+otherwise. `make test` runs the app's tests and mypy along with the check
+scripts' tests.
+
 ## How it fits together
 
 - **Grafana** runs as a scale-to-zero container app on the shared environment,

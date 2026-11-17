@@ -32,3 +32,18 @@ override.tf.json
 # macOS finder metadata
 .DS_Store
 **/.DS_Store
+
+# The obsview app (app/)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+# Fetched by `make app-vendor`, never committed (see app/Dockerfile).
+app/vendor/
+# Local settings, e.g. WORKSPACE_ID and APP_PASSCODE.
+.env
+.env.*
+!.env.example

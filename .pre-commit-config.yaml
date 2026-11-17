@@ -55,6 +55,18 @@ repos:
       - id: shellcheck
         args: [--external-sources]
 
+  # The obsview app (app/). Its config, rule selection included, is in
+  # app/pyproject.toml, which ruff finds by walking up from each file.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: ef6cf06c079dd6b299dfc720b0f14400c9d168e1 # frozen: v0.17.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+
+      # Python only: the upstream hook's types_or includes markdown.
+      - id: ruff-format
+        types_or: [python, pyi]
+
   - repo: local
     hooks:
       # Replaces the upstream hadolint-docker hook: that one calls

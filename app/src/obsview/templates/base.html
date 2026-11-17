@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/static/app.css">
+<title>{% block title %}Observability{% endblock %}</title>
+</head>
+<body>
+{% if page != "login" %}
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="/">Observability <span class="env">{{ environment }}</span></a>
+    <nav class="tabs" aria-label="Views">
+      <a href="/deployments?days={{ days }}" {% if page == "deployments" %}aria-current="page"{% endif %}>Deployments</a>
+      <span title="Coming next">Jobs &amp; ops</span>
+      <span title="Coming next">Costs</span>
+    </nav>
+    {% if days %}
+    <div class="range" role="group" aria-label="Time range">
+      {% for r in ranges %}
+      <a href="?days={{ r }}" {% if r == days %}aria-current="true"{% endif %}>{{ r }}d</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</header>
+{% endif %}
+<main class="wrap">
+  {% if demo and page != "login" %}
+  <p class="banner"><strong>Demo data.</strong> No <code>WORKSPACE_ID</code> is configured, so these numbers are generated, not real.</p>
+  {% endif %}
+  {% block body %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

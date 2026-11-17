@@ -1,0 +1,26 @@
+name: ci-python
+
+# The obsview app's tests, type check and coverage, through the shared
+# python.yml (the same call gym-log makes), run from app/ where its
+# pyproject.toml and uv.lock live. Not yet a required check: it becomes one
+# in github-repos once it has reported reliably.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    uses: jay-withers/workflows/.github/workflows/python.yml@801fec3f77ffca7b2124bd0aa24be37b60bda7ac # v1.28.4
+    with:
+      working-directory: app
+      # The runtime image's Python (dev-containers python-app), not the latest.
+      python-version: "3.14"
+      extras: dev
+      coverage: obsview
+      coverage-pr-comment: true
+      diff-coverage: "80"
+      typecheck: mypy
