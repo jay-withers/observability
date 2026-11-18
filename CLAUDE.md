@@ -42,8 +42,9 @@ and workspace resolved by name, never by remote state.
 - **Scale to zero**, cold start accepted (decided at the obsview cutover,
   2026-11-17). It is opened a few times a week. Alerting lives in Azure
   Monitor, so nothing depends on it being awake.
-- **The app repos' shared smoke test** (`scripts/smoke.sh`, verbatim from
-  gym-log): `/healthz` must report the tag, then `/readyz`, which queries
+- **The app repos' shared smoke test** (jay-withers/workflows'
+  `scripts/smoke.sh`, which `make smoke` fetches at the commit cd-publish
+  pins; no copy here): `/healthz` must report the tag, then `/readyz`, which queries
   the workspace as the app's identity, must answer 200. Grafana had a smoke
   test of its own until the cutover.
 
