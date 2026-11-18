@@ -169,3 +169,55 @@ def test_a_malformed_range_falls_back_rather_than_422(
     for bad in ("30d", ""):
         assert client.get(f"/deployments?days={bad}").status_code == 200
     assert recording.spans == [deployments.window(routes.DEFAULT_RANGE)] * 2
+
+
+@pytest.mark.parametrize("path", ["/ops", "/costs"])
+def test_ops_and_costs_pages_render_demo_data(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    response = client.get(f"{path}?days=30")
+    assert response.status_code == 200
+    assert 'id="chart-data"' in response.text
+    assert 'aria-current="page"' in response.text
+
+
+@pytest.mark.parametrize("path", ["/ops", "/costs"])
+def test_ops_and_costs_pages_render_with_no_rows(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    assert client.get(path).status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/ops", "/costs"])
+def test_ops_and_costs_query_failure_is_a_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    use(monkeypatch, Failing())
+    sign_in(client)
+    response = client.get(path)
+    assert response.status_code == 502
+    assert "HttpResponseError" in response.text
+
+
+class FailedRunsBroken:
+    """OpsEvents_CL answers; ContainerAppSystemLogs_CL does not."""
+
+    def query(self, kql: str, timespan: timedelta) -> list[Row]:
+        if "ContainerAppSystemLogs_CL" in kql:
+            raise QueryFailed("Log Analytics query failed: HttpResponseError")
+        return DemoLogs(now=datetime.now(UTC)).query(kql, timespan)
+
+
+def test_ops_page_survives_the_failed_runs_query_failing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, FailedRunsBroken())
+    sign_in(client)
+    response = client.get("/ops")
+    assert response.status_code == 200
+    assert "read the failed job runs" in response.text
+    assert "Jobs and checks" in response.text

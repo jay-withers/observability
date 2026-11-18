@@ -19,6 +19,7 @@ from typing import Any
 
 from .logs import Row
 from .sparkline import sparkline
+from .times import parse_time
 
 OUTCOMES = ("success", "untested", "rolled_back", "failed")
 SUCCEEDED = frozenset({"success", "untested"})
@@ -73,13 +74,9 @@ class Deploy:
 def parse(rows: list[Row]) -> list[Deploy]:
     deploys = []
     for row in rows:
-        when = row.get("TimeGenerated")
-        if isinstance(when, str):
-            when = datetime.fromisoformat(when.replace("Z", "+00:00"))
-        if not isinstance(when, datetime):
+        when = parse_time(row.get("TimeGenerated"))
+        if when is None:
             continue
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=UTC)
         lead = row.get("LeadTimeSec")
         deploys.append(
             Deploy(

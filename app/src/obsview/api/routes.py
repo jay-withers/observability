@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import deployments
+from .. import costs, deployments, ops
 from ..logs import CachedLogs, LogsSource, QueryFailed
 from ..settings import settings
 from . import deps
@@ -153,13 +154,67 @@ def _deployments(request: Request, days: int) -> Any:
     try:
         rows = source().query(deployments.kql(cfg.environment), deployments.window(days))
     except QueryFailed as exc:
-        return templates.TemplateResponse(
-            request,
-            "error.html",
-            _context(request, "deployments", days, error=str(exc)),
-            status_code=status.HTTP_502_BAD_GATEWAY,
-        )
+        return _failed(request, "deployments", days, exc)
     view = deployments.build(deployments.parse(rows), days, datetime.now(UTC))
     return templates.TemplateResponse(
         request, "deployments.html", _context(request, "deployments", days, view=view)
+    )
+
+
+def _failed(request: Request, page: str, days: int, exc: QueryFailed) -> Any:
+    return templates.TemplateResponse(
+        request,
+        "error.html",
+        _context(request, page, days, error=str(exc)),
+        status_code=status.HTTP_502_BAD_GATEWAY,
+    )
+
+
+def _both(first: tuple[str, timedelta], second: tuple[str, timedelta]) -> tuple[Any, Any]:
+    """Two queries at once: a cold page waits for the slower, not the sum."""
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(source().query, *first)
+        b = pool.submit(source().query, *second)
+        return a.result(), b.result()
+
+
+@router.get("/ops", response_class=HTMLResponse, include_in_schema=False)
+def ops_page(request: Request, days: str = Query(default="")) -> Any:
+    span = _range(days)
+    env = settings().environment
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        events_job = pool.submit(source().query, ops.kql(env), ops.window(span))
+        failed_job = pool.submit(source().query, ops.FAILED_RUNS_KQL, timedelta(days=span))
+        try:
+            events = events_job.result()
+        except QueryFailed as exc:
+            return _failed(request, "ops", span, exc)
+        # The failed-runs card is secondary: if its query fails, say so there
+        # and still show every check, as Grafana failed one panel, not all.
+        try:
+            failed: list[ops.FailedRun] | None = ops.parse_failed_runs(failed_job.result())
+        except QueryFailed:
+            logger.warning("failed-runs query failed; rendering ops without it")
+            failed = None
+    view = ops.build(ops.parse(events), failed, span, datetime.now(UTC))
+    return templates.TemplateResponse(
+        request, "ops.html", _context(request, "ops", span, view=view)
+    )
+
+
+@router.get("/costs", response_class=HTMLResponse, include_in_schema=False)
+def costs_page(request: Request, days: str = Query(default="")) -> Any:
+    span = _range(days)
+    cfg = settings()
+    try:
+        rows, events = _both(
+            (costs.KQL, costs.window(span)),
+            (ops.kql(cfg.environment), ops.window(DEFAULT_RANGE)),
+        )
+    except QueryFailed as exc:
+        return _failed(request, "costs", span, exc)
+    now = datetime.now(UTC)
+    view = costs.build(costs.parse(rows), ops.latest(ops.parse(events), now), span, now, cfg.budget)
+    return templates.TemplateResponse(
+        request, "costs.html", _context(request, "costs", span, view=view)
     )

@@ -25,17 +25,26 @@ Later phases add app health and delivery.
 ## obsview: the replacement for Grafana
 
 `app/` is **obsview**, a small FastAPI app that is replacing Grafana: the
-same tables, with charts designed for them, phone-first, and no cold start
-once it runs with a warm replica. It is being built in steps:
+same tables, with charts designed for them, built for a phone. It is
+being built in steps:
 
-1. **The app and the Deployments view** (this change): KPI tiles with
-   sparklines and deltas against the previous period, outcomes per day, a
-   per-app deploy timeline, a 13-week activity calendar, lead-time
-   distribution, per-app cards and the recent deploys. Built and published as
-   `ghcr.io/jay-withers/observability/obsview`; nothing runs it yet.
-2. Terraform points the container app at it (a `terraform-pending` apply).
-3. Jobs and ops, and Costs.
+1. **Deployments**: KPI tiles with sparklines and deltas against the
+   previous period, outcomes per day, a per-app deploy timeline, a 13-week
+   activity calendar, lead-time distribution, per-app cards and the recent
+   deploys.
+2. **Jobs and ops** and **Costs**. Jobs and ops: a problems-now summary,
+   counts per kind, a 30-day status grid per kind of check (worst status per
+   day), certificate expiry as gauges, and failed job runs. Costs: month to
+   date against forecast and the $150 budget as one bullet bar, daily spend
+   stacked by area, a treemap of the month (area, resource group, service),
+   the top resource groups and services, and the session resources.
+3. Terraform points the container app at it (a `terraform-pending` apply).
 4. Grafana, its image and the Grafana Cloud sync are removed.
+
+Steps 1 and 2 are published as `ghcr.io/jay-withers/observability/obsview`;
+nothing runs it until step 3. (Grafana Cloud was never set up, so the
+views come first: the cutover must not leave Jobs and ops or Costs with
+nowhere to live.)
 
 How it works:
 
