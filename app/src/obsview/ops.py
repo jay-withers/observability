@@ -63,19 +63,24 @@ def kql(environment: str) -> str:
     )
 
 
-# Container Apps' own record of job executions that failed. Summarised in
-# KQL rather than fetched raw: a crash-looping job writes a row per attempt.
+# Container Apps' own record of job executions that failed, and of apps
+# whose container crashed (the same reasons azure-container-apps' crash alert
+# reads). Summarised in KQL rather than fetched raw: a crash-looping job or
+# revision writes a row per attempt.
 #
 # The table exists only once something has logged to it, so it is read
 # through a fuzzy union with an empty datatable (as azure-container-apps'
-# alerts do): a workspace where no job has run yet answers with no rows
-# rather than "Failed to resolve table".
+# alerts do): a workspace where nothing has run yet answers with no rows
+# rather than "Failed to resolve table". A row names a job or an app, never
+# both, so `coalesce` gives the one workload name.
 FAILED_RUNS_KQL = """union isfuzzy=true ContainerAppSystemLogs_CL,
-    (datatable(TimeGenerated: datetime, JobName_s: string, Reason_s: string, Log_s: string)[])
-| where isnotempty(JobName_s)
+    (datatable(TimeGenerated: datetime, JobName_s: string, ContainerAppName_s: string,
+               Reason_s: string, Log_s: string)[])
+| extend Workload = coalesce(JobName_s, ContainerAppName_s)
+| where isnotempty(Workload)
 | where Reason_s in ("BackoffLimitExceeded", "DeadlineExceeded", "ContainerCrashing", "StartError")
 | summarize Failures = count(), LastFailure = max(TimeGenerated), Sample = take_any(Log_s)
-    by Job = JobName_s, Reason = Reason_s
+    by Job = Workload, Reason = Reason_s
 | order by LastFailure desc"""
 
 

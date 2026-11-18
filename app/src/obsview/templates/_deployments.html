@@ -1,0 +1,89 @@
+{# The deployments panels, shared by /deployments and each app's page. #}
+{% macro badge(outcome) %}<span class="badge o-{{ outcome }}">{{ outcome | replace("_", " ") }}</span>{% endmacro %}
+<section class="tiles" aria-label="Headline figures">
+  {% for k in view.kpis %}
+  <div class="card tile">
+    <div class="label">{{ k.label }}</div>
+    <div class="value">{{ k.value }}</div>
+    {% if k.delta %}<div class="delta {{ k.tone }}">{{ k.delta }}</div>{% endif %}
+    {% if k.spark %}
+    <svg viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"><path d="{{ k.spark }}" vector-effect="non-scaling-stroke"/></svg>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+{% if view.total == 0 %}
+<div class="card" style="margin-top:10px"><p class="empty">No deploys in the last {{ days }} day{{ "s" if days != 1 }}.</p></div>
+{% else %}
+<div class="grid two">
+  <div class="card">
+    <h2>Outcomes per day</h2>
+    <p class="sub">Stacked by result</p>
+    <ul class="legend">
+      <li><span class="swatch s-success"></span>Success</li>
+      <li><span class="swatch s-untested"></span>Untested</li>
+      <li><span class="swatch s-rolled_back"></span>Rolled back</li>
+      <li><span class="swatch s-failed"></span>Failed</li>
+    </ul>
+    <div class="chart" {% if group %}data-group="{{ group }}" {% endif %}data-chart="outcomes" role="img" aria-label="Deploys per day, stacked by outcome"></div>
+  </div>
+  <div class="card">
+    <h2>What triggered them</h2>
+    <p class="sub">Share of deploys by trigger</p>
+    <div class="chart" {% if group %}data-group="{{ group }}" {% endif %}data-chart="triggers" role="img" aria-label="Deploys by trigger"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>Every deploy, by app</h2>
+  <p class="sub">One dot per deploy; hover or tap for the version</p>
+  <div class="chart" {% if group %}data-group="{{ group }}" {% endif %}data-chart="timeline" style="height: {{ 70 + 30 * view.charts.timeline.apps | length }}px"
+       role="img" aria-label="Timeline of deploys per app, coloured by outcome"></div>
+</div>
+
+<div class="grid halves">
+  <div class="card">
+    <h2>Activity</h2>
+    <p class="sub">Deploys per day, last 13 weeks</p>
+    <div class="chart short" {% if group %}data-group="{{ group }}" {% endif %}data-chart="calendar" role="img" aria-label="Calendar heatmap of deploys per day"></div>
+  </div>
+  <div class="card">
+    <h2>Lead time</h2>
+    <p class="sub">Merge to live, deploys with a recorded lead time</p>
+    <div class="chart short" {% if group %}data-group="{{ group }}" {% endif %}data-chart="lead" role="img" aria-label="Histogram of lead times"></div>
+  </div>
+</div>
+
+<h2 class="section-title">By app</h2>
+<div class="apps">
+  {% for a in view.apps %}
+  <div class="card app">
+    <div class="name">{% if not per_app and a.repo in app_slugs %}<a href="/apps/{{ a.repo }}?days={{ days }}">{{ a.label }}</a>{% else %}<span>{{ a.label }}</span>{% endif %}{{ badge(a.last.outcome) }}</div>
+    <div class="meta">{{ a.last.version }} · {{ ago(a.last.when, view.now) }}</div>
+    <div class="meta">{{ a.deploys }} deploy{{ "s" if a.deploys != 1 }} · {{ "%.0f" | format(a.success_pct) }}% ok · lead {{ a.median_lead }}{% if a.rolled_back %} · {{ a.rolled_back }} rolled back{% endif %}{% if a.failed %} · {{ a.failed }} failed{% endif %}</div>
+    <div class="bar-track" aria-hidden="true">
+      <i style="width: {{ a.success_pct }}%; background: var(--status-good)"></i>
+      {% if a.rolled_back %}<i style="width: {{ 100 * a.rolled_back / a.deploys }}%; background: var(--status-warning)"></i>{% endif %}
+      {% if a.failed %}<i style="width: {{ 100 * a.failed / a.deploys }}%; background: var(--status-critical)"></i>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">Recent</h2>
+<div class="card">
+  <ol class="recent">
+    {% for d in view.recent %}
+    <li>
+      {% if d.run_url %}<a href="{{ d.run_url }}" rel="noopener" target="_blank">{% endif %}
+        <div class="what">{{ d.label }} <small>{{ d.version }}{% if d.previous_version %} ← {{ d.previous_version }}{% endif %}</small></div>
+      {% if d.run_url %}</a>{% endif %}
+      <div class="when" title="{{ d.when.isoformat() }}">{{ ago(d.when, view.now) }}</div>
+      <div class="how">{{ d.trigger }}{% if d.lead_time_sec is not none %} · lead {{ duration(d.lead_time_sec) }}{% endif %}{% if d.commit %} · {{ d.commit }}{% endif %}</div>
+      <div>{{ badge(d.outcome) }}</div>
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}

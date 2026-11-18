@@ -20,6 +20,7 @@ APPS = [
     ("observability", "obsview"),
     ("repo-agent", "repoagent"),
     ("security-testing", "scanner"),
+    ("market-agent", "api"),
 ]
 
 
@@ -30,11 +31,16 @@ class DemoLogs:
 
     def query(self, kql: str, timespan: timedelta) -> list[Row]:
         now = self._now or datetime.now(UTC)
-        table = kql.lstrip().split("\n", 1)[0].split(" ", 1)[0]
+        first = kql.lstrip().split("\n", 1)[0]
+        table = first.split(" ", 1)[0]
         if table == "OpsEvents_CL":
             return _ops(now, timespan, random.Random(self._seed))
-        if table == "ContainerAppSystemLogs_CL":
+        # The Container Apps tables are read through a fuzzy union, so the
+        # first word is `union`; the table is named later on the line.
+        if "ContainerAppSystemLogs_CL" in first:
             return _failed_runs(now)
+        if "ContainerAppConsoleLogs_CL" in first:
+            return _console_errors(now, timespan, random.Random(self._seed))
         if table == "Costs_CL":
             return _costs(now, timespan, random.Random(self._seed))
         if table != "Deployments_CL":
@@ -82,28 +88,31 @@ class DemoLogs:
 
 
 JOBS = [
-    "gymlog-garmin",
-    "gymlog-insight",
-    "gymlog-backup",
-    "finances-backup",
-    "career-backup",
-    "repoagent-scan",
-    "sectest-scan",
+    "caj-gymlog-dev-garmin",
+    "caj-gymlog-dev-insight",
+    "caj-gymlog-dev-backup",
+    "caj-finances-dev-backup",
+    "caj-finances-dev-digest",
+    "caj-career-dev-backup",
+    "caj-marketagent-dev-daily-summary",
+    "caj-repoagent-dev-scan",
+    "caj-sectest-dev-zap",
 ]
 ROOTS = [
     "azure-landingzone/hub",
-    "azure-container-apps",
-    "cloudflare",
-    "github-repos",
-    "gym-log",
-    "finances",
-    "career",
-    "observability",
+    "azure-container-apps/terraform",
+    "cloudflare/terraform",
+    "github-repos/terraform",
+    "gym-log/terraform",
+    "finances/terraform",
+    "career/terraform",
+    "market-agent/terraform",
+    "observability/terraform",
 ]
 HOSTS = [
-    "gym.jaywithers.uk",
+    "health.jaywithers.uk",
     "finances.jaywithers.uk",
-    "career.jaywithers.uk",
+    "marketagent.jaywithers.uk",
     "observability.jaywithers.uk",
 ]
 SESSIONS = [
@@ -140,7 +149,7 @@ def _ops(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
             )
 
         for job in JOBS:
-            late = job == "sectest-scan" and back < 2
+            late = job == "caj-sectest-dev-zap" and back < 2
             add(
                 "heartbeat",
                 job,
@@ -150,7 +159,7 @@ def _ops(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
         for check in ("cost-feed", "expiry", "session"):
             add("heartbeat", f"check: {check}", "ok", "Last row today.")
         for root in ROOTS:
-            drifted = root == "cloudflare" and back in (3, 4, 5)
+            drifted = root == "cloudflare/terraform" and back in (3, 4, 5)
             status = "drifted" if drifted else ("failed" if rng.random() < 0.02 else "ok")
             add(
                 "drift",
@@ -187,14 +196,21 @@ def _ops(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
 def _failed_runs(now: datetime) -> list[Row]:
     return [
         {
-            "Job": "sectest-scan",
+            "Job": "caj-sectest-dev-zap",
             "Reason": "BackoffLimitExceeded",
             "Failures": 3,
             "LastFailure": now - timedelta(hours=30),
             "Sample": "Job has reached the specified backoff limit",
         },
         {
-            "Job": "gymlog-garmin",
+            "Job": "ca-finances-dev",
+            "Reason": "ContainerCrashing",
+            "Failures": 2,
+            "LastFailure": now - timedelta(days=2),
+            "Sample": "Container 'finances' was terminated with exit code 3",
+        },
+        {
+            "Job": "caj-gymlog-dev-garmin",
             "Reason": "ContainerCrashing",
             "Failures": 1,
             "LastFailure": now - timedelta(days=4),
@@ -242,4 +258,37 @@ def _costs(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
                     "Currency": "USD",
                 }
             )
+    return rows
+
+
+ERRORS = [
+    ("ca-gymlog-dev", "ERROR:    Exception in ASGI application", 0.6),
+    (
+        "ca-gymlog-dev",
+        'INFO:     10.0.0.4:5123 - "GET /sessions/{n} HTTP/1.1" 500 Internal Server Error',
+        0.5,
+    ),
+    ("caj-gymlog-dev-garmin", "ERROR garmin: login failed (HTTP 429), retrying in {n}s", 0.4),
+    ("ca-finances-dev", "ERROR sqlalchemy.pool: connection {n} was closed by the server", 0.2),
+    ("ca-marketagent-dev", "CRITICAL risk: order {n} rejected: position limit exceeded", 0.15),
+    ("caj-repoagent-dev-scan", "ERROR github: 502 Bad Gateway from api.github.com", 0.3),
+]
+
+
+def _console_errors(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
+    rows: list[Row] = []
+    for back in range(max(1, timespan.days)):
+        for workload, message, chance in ERRORS:
+            for _ in range(rng.randint(1, 3)):
+                if rng.random() > chance:
+                    continue
+                when = now - timedelta(days=back, minutes=rng.randint(0, 1439))
+                rows.append(
+                    {
+                        "TimeGenerated": when,
+                        "Workload": workload,
+                        "Log_s": message.replace("{n}", str(rng.randint(1, 900))),
+                    }
+                )
+    rows.sort(key=lambda r: r["TimeGenerated"], reverse=True)
     return rows

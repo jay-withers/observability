@@ -110,6 +110,7 @@ class Kpi:
 @dataclass
 class AppRow:
     label: str
+    repo: str
     deploys: int
     success_pct: float
     rolled_back: int
@@ -129,6 +130,12 @@ class View:
     charts: dict[str, Any] = field(default_factory=dict)
 
 
+def range_start(days: int, now: datetime) -> datetime:
+    """The range is whole UTC days ending today: its first midnight."""
+    first = now.astimezone(UTC).date() - timedelta(days=days - 1)
+    return datetime.combine(first, time.min, tzinfo=UTC)
+
+
 def build(deploys: list[Deploy], days: int, now: datetime) -> View:
     # The range is whole UTC days ending today, so the tiles, the daily bars
     # and the sparklines all count the same deploys. A rolling `now - days`
@@ -136,7 +143,7 @@ def build(deploys: list[Deploy], days: int, now: datetime) -> View:
     # charts while the tiles counted it.
     today = now.astimezone(UTC).date()
     dates = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
-    current_start = datetime.combine(dates[0], time.min, tzinfo=UTC)
+    current_start = range_start(days, now)
     previous_start = current_start - timedelta(days=days)
     current = [d for d in deploys if current_start <= d.when <= now]
     previous = [d for d in deploys if previous_start <= d.when < current_start]
@@ -172,7 +179,7 @@ def build(deploys: list[Deploy], days: int, now: datetime) -> View:
 # --- tiles --------------------------------------------------------------------
 
 
-def _rate(part: int, whole: int) -> float | None:
+def rate(part: int, whole: int) -> float | None:
     return 100.0 * part / whole if whole else None
 
 
@@ -207,7 +214,7 @@ def _kpis(
 
     ok_now = sum(d.succeeded for d in current)
     ok_before = sum(d.succeeded for d in previous)
-    rate_now, rate_before = _rate(ok_now, n_now), _rate(ok_before, n_before)
+    rate_now, rate_before = rate(ok_now, n_now), rate(ok_before, n_before)
 
     rb_now = sum(d.outcome == "rolled_back" for d in current)
     rb_before = sum(d.outcome == "rolled_back" for d in previous)
@@ -215,8 +222,8 @@ def _kpis(
     failed_before = sum(d.outcome == "failed" for d in previous)
 
     lead_now, lead_before = _median_lead(current), _median_lead(previous)
-    reno_now = _rate(sum(d.trigger == "renovate" for d in current), n_now)
-    reno_before = _rate(sum(d.trigger == "renovate" for d in previous), n_before)
+    reno_now = rate(sum(d.trigger == "renovate" for d in current), n_now)
+    reno_before = rate(sum(d.trigger == "renovate" for d in previous), n_before)
 
     kpis = []
     delta, tone = count_delta(n_now, n_before, None)
@@ -227,7 +234,7 @@ def _kpis(
         Kpi(
             "Success rate",
             _fmt_pct(rate_now),
-            sparkline([_rate(sum(d.succeeded for d in ds), len(ds)) for ds in per_day]),
+            sparkline([rate(sum(d.succeeded for d in ds), len(ds)) for ds in per_day]),
             delta_p,
             tone,
         )
@@ -275,7 +282,7 @@ def _kpis(
         Kpi(
             "Renovate share",
             _fmt_pct(reno_now),
-            sparkline([_rate(sum(d.trigger == "renovate" for d in ds), len(ds)) for ds in per_day]),
+            sparkline([rate(sum(d.trigger == "renovate" for d in ds), len(ds)) for ds in per_day]),
             delta_p,
             tone,
         )
@@ -331,8 +338,9 @@ def _apps(current: list[Deploy]) -> list[AppRow]:
         rows.append(
             AppRow(
                 label=label,
+                repo=ds[0].repo,
                 deploys=len(ds),
-                success_pct=_rate(sum(d.succeeded for d in ds), len(ds)) or 0.0,
+                success_pct=rate(sum(d.succeeded for d in ds), len(ds)) or 0.0,
                 rolled_back=sum(d.outcome == "rolled_back" for d in ds),
                 failed=sum(d.outcome == "failed" for d in ds),
                 median_lead=fmt_duration(lead) if lead is not None else "–",

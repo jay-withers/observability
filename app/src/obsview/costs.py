@@ -51,9 +51,35 @@ def area(resource_group: str) -> str:
 
 
 def window(days: int) -> timedelta:
-    """The range or this month, whichever is longer, plus the week a day's
-    rows keep being re-posted for, so the latest post of each day is in it."""
-    return timedelta(days=max(days, 31) + 8)
+    """The range and the one before it (for the delta), or this month,
+    whichever is longer, plus the week a day's rows keep being re-posted
+    for, so the latest post of each day is in it."""
+    return timedelta(days=max(2 * days, 31) + 8)
+
+
+def billing_currency(costs: list[Cost]) -> str:
+    """The currency most rows are in. Summing two would be meaningless."""
+    counts: dict[str, int] = defaultdict(int)
+    for c in costs:
+        counts[c.currency] += 1
+    return max(sorted(counts), key=lambda k: counts[k]) if counts else ""
+
+
+def symbol(currency: str) -> str:
+    return SYMBOLS.get(currency, f"{currency} " if currency else "")
+
+
+def spend(costs: list[Cost], end: date, days: int) -> float:
+    """The range's total in the billing currency, as `build` counts it."""
+    currency = billing_currency(costs)
+    start = end - timedelta(days=days - 1)
+    return sum(c.cost for c in costs if c.currency == currency and start <= c.day <= end)
+
+
+def last_day(costs: list[Cost], today: date) -> date:
+    """The newest day with data, never after today. The feed lags a day or
+    two, so a range ending today would end in days that read as no spend."""
+    return min(today, max((c.day for c in costs), default=today))
 
 
 @dataclass(frozen=True)
@@ -107,6 +133,13 @@ class View:
     month_label: str
     month_to_date: float
     forecast: float | None
+    # The selected range: total, the range before it, and the dates covered.
+    range_start: date
+    range_end: date
+    total: float
+    prior_total: float | None
+    delta: str | None
+    tone: str
     budget: float
     budget_used: float
     data_through: date | None
@@ -133,15 +166,15 @@ def build(
     days: int,
     now: datetime,
     budget: float,
+    end: date | None = None,
 ) -> View:
+    """`end` is the range's last day; by default the last day with data. An
+    app's page passes the estate's, so a quiet app's range isn't shifted."""
     today = now.astimezone(UTC).date()
     # One currency: summing two would be meaningless. The billing currency is
     # the one most rows are in; any others are counted and left out.
-    counts: dict[str, int] = defaultdict(int)
-    for c in costs:
-        counts[c.currency] += 1
-    currency = max(sorted(counts), key=lambda k: counts[k]) if counts else ""
-    left_out = sum(n for k, n in counts.items() if k != currency)
+    currency = billing_currency(costs)
+    left_out = sum(1 for c in costs if c.currency != currency)
     costs = [c for c in costs if c.currency == currency]
 
     month_start = today.replace(day=1)
@@ -157,11 +190,28 @@ def build(
         days_with_data = (month_through - month_start).days + 1
         forecast = mtd / days_with_data * calendar.monthrange(today.year, today.month)[1]
 
-    symbol = SYMBOLS.get(currency, f"{currency} " if currency else "")
+    sym = symbol(currency)
+
+    end = end or last_day(costs, today)
+    start = end - timedelta(days=days - 1)
+    prior_start = start - timedelta(days=days)
+    in_range = [c for c in costs if start <= c.day <= end]
+    total = sum(c.cost for c in in_range)
+    # A prior total only when the data reaches back that far: a range before
+    # the table's retention would read as a fall from zero.
+    prior_total = None
+    if costs and min(c.day for c in costs) <= prior_start:
+        prior_total = sum(c.cost for c in costs if prior_start <= c.day < start)
+    delta, tone = None, "neutral"
+    if prior_total is not None:
+        diff = total - prior_total
+        delta = f"{'+' if diff >= 0 else '-'}{sym}{abs(diff):,.2f} vs prior {days}d"
+        if round(diff, 2):
+            tone = "good" if diff < 0 else "bad"
 
     by_group: dict[str, float] = defaultdict(float)
     by_service: dict[str, float] = defaultdict(float)
-    for c in month:
+    for c in in_range:
         by_group[c.resource_group] += c.cost
         by_service[c.service] += c.cost
 
@@ -172,10 +222,16 @@ def build(
     return View(
         days=days,
         now=now,
-        symbol=symbol,
+        symbol=sym,
         month_label=today.strftime("%B"),
         month_to_date=mtd,
         forecast=forecast,
+        range_start=start,
+        range_end=end,
+        total=total,
+        prior_total=prior_total,
+        delta=delta,
+        tone=tone,
         budget=budget,
         budget_used=100.0 * mtd / budget if budget else 0.0,
         # The newest day with any data: early in a month the feed's lag
@@ -188,8 +244,8 @@ def build(
         sessions=sessions,
         feed=ops.get(("cost-feed", "Costs_CL")),
         charts={
-            "spend": _daily(costs, today, days),
-            "treemap": _treemap(month),
+            "spend": _daily(costs, end, days),
+            "treemap": _treemap(in_range),
             "areas": list(AREA_ORDER),
         },
     )
@@ -213,10 +269,7 @@ def _bars(totals: dict[str, float], limit: int = 0, area_of: Any = None) -> list
     ]
 
 
-def _daily(costs: list[Cost], today: date, days: int) -> dict[str, Any]:
-    # Ends at the newest day with data, not today: the feed lags a day or
-    # two, and a series ending in zeros reads as spend falling off a cliff.
-    end = min(today, max((c.day for c in costs), default=today))
+def _daily(costs: list[Cost], end: date, days: int) -> dict[str, Any]:
     dates = [end - timedelta(days=i) for i in range(days - 1, -1, -1)]
     index = {d: i for i, d in enumerate(dates)}
     series = {a: [0.0] * len(dates) for a in AREA_ORDER}
@@ -231,7 +284,7 @@ def _daily(costs: list[Cost], today: date, days: int) -> dict[str, Any]:
 
 
 def _treemap(month: list[Cost]) -> list[dict[str, Any]]:
-    """Area > resource group > service, this month."""
+    """Area > resource group > service, over the range."""
     tree: dict[str, dict[str, dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(float))
     )

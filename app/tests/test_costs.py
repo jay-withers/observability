@@ -139,9 +139,10 @@ def test_gauge_scale_fits_the_largest_of_budget_forecast_and_spend() -> None:
     assert view.scale(view.budget) < view.scale(view.forecast or 0)
 
 
-def test_window_covers_the_month_and_the_repost_week() -> None:
+def test_window_covers_the_month_or_two_ranges_and_the_repost_week() -> None:
+    assert costs.window(1) == timedelta(days=39)
     assert costs.window(7) == timedelta(days=39)
-    assert costs.window(90) == timedelta(days=98)
+    assert costs.window(90) == timedelta(days=188)
 
 
 def test_daily_series_end_at_the_last_day_with_data() -> None:
@@ -182,3 +183,72 @@ def test_early_in_the_month_data_through_shows_last_month() -> None:
 def test_a_malformed_date_skips_the_row() -> None:
     rows = [{"UsageDate": "not a date", "ResourceGroup": "rg", "ServiceName": "s", "Cost": 1.0}]
     assert costs.parse(rows) == []
+
+
+def test_breakdowns_follow_the_range_not_the_month() -> None:
+    rows = [
+        row(date(2026, 11, 15), "rg-platform-dev", "Log Analytics", 1.0),
+        row(date(2026, 11, 10), "rg-gymlog-dev", "Storage", 5.0),  # outside 3 days
+        row(date(2026, 10, 30), "rg-aks-dev", "AKS", 7.0),  # last month, inside 30 days
+    ]
+    short = build(rows, days=3)
+    assert short.total == pytest.approx(1.0)
+    assert [b.label for b in short.groups] == ["rg-platform-dev"]
+    assert [n["name"] for n in short.charts["treemap"]] == ["platform"]
+    wide = build(rows, days=30)
+    assert wide.total == pytest.approx(13.0)
+    assert {b.label for b in wide.services} == {"Log Analytics", "Storage", "AKS"}
+    assert wide.month_to_date == pytest.approx(6.0)  # the budget card stays the month
+
+
+def test_range_ends_on_the_last_day_with_data() -> None:
+    # The feed is through the 15th; a one-day range is the 15th, not an
+    # empty 17th.
+    view = build([row(date(2026, 11, 15), "rg-platform-dev", "a", 2.0)], days=1)
+    assert (view.range_start, view.range_end) == (date(2026, 11, 15), date(2026, 11, 15))
+    assert view.total == pytest.approx(2.0)
+
+
+def test_an_explicit_end_is_kept_for_a_quiet_app() -> None:
+    view = costs.build(
+        costs.parse([row(date(2026, 11, 10), "rg-gymlog-dev", "Storage", 1.0)]),
+        {},
+        3,
+        NOW,
+        budget=150.0,
+        end=date(2026, 11, 16),
+    )
+    assert view.range_end == date(2026, 11, 16)
+    assert view.total == 0
+
+
+def test_delta_against_the_prior_range() -> None:
+    rows = [
+        row(date(2026, 11, 15), "rg-platform-dev", "a", 3.0),
+        row(date(2026, 11, 14), "rg-platform-dev", "a", 1.0),  # prior day
+    ]
+    view = build(rows, days=1)
+    assert view.prior_total == pytest.approx(1.0)
+    assert view.delta == "+$2.00 vs prior 1d"
+    assert view.tone == "bad"
+
+
+def test_no_delta_when_the_data_does_not_reach_the_prior_range() -> None:
+    # Retention: nothing before the 14th, so a 3-day range's prior (9th-11th)
+    # would read as a rise from nothing.
+    rows = [row(date(2026, 11, d), "rg-platform-dev", "a", 1.0) for d in (14, 15)]
+    view = build(rows, days=3)
+    assert view.prior_total is None
+    assert view.delta is None
+
+
+def test_spend_matches_builds_total() -> None:
+    rows = costs.parse(
+        [
+            row(date(2026, 11, 15), "rg-gymlog-dev", "a", 2.0),
+            row(date(2026, 11, 10), "rg-gymlog-dev", "a", 3.0),
+            row(date(2026, 11, 15), "rg-gymlog-dev", "a", 9.0, "GBP"),
+        ]
+    )
+    end = date(2026, 11, 15)
+    assert costs.spend(rows, end, 3) == costs.build(rows, {}, 3, NOW, 150.0, end=end).total == 2.0

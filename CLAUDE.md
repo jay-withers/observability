@@ -132,6 +132,28 @@ and workspace resolved by name, never by remote state.
   Grafana's did: the feed lags a day or two. The daily chart ends at the
   last day with data for the same reason. The budget is `BUDGET`
   (default 150).
+- **Costs follow the range; the budget card stays the month.** The total,
+  the breakdowns and the treemap cover the selected range, ending on the
+  last day with data. The "vs prior" delta is shown only when the data
+  reaches back to the start of the prior range, so retention can't pass for
+  a rise from nothing. The ranges are `routes.RANGES` (1 to 90 days); the
+  event tables' retention in azure-container-apps bounds how far back they
+  have data.
+- **Per-app pages (`/apps`, `/apps/<slug>`) are the estate views sliced
+  by `apps.APPS`**: the same builders over filtered rows, the same queries
+  and windows (so they share the cache), and the same templates
+  (`_deployments.html`, `_ops.html`, `_costs.html`, with `per_app` hiding
+  estate-only cards and `data-group` keying each chart's data). A new app
+  is a row in `apps.APPS`; its `prefix` is the repo's `project_name`, which
+  names its resource group and Container Apps workloads. Only the deploy
+  query is required; the rest render a "couldn't read" card on failure.
+- **App errors are console-log lines** (`errors.py`): `ERROR` or
+  `CRITICAL`, or a 5xx access line, grouped in Python by first line with
+  UUIDs, hex ids, numbers and quoted values masked. The query caps each
+  workload at `errors.PER_WORKLOAD` lines (a literal in the KQL too) and
+  returns its true total, so one crash loop can't crowd out other apps. App crashes come from the failed
+  runs query, which reads apps as well as jobs. Neither KQL is exercised by
+  the tests; check it against the workspace.
 - **No Key Vault**: the passcode is the container app secret `passcode`,
   mapped to `APP_PASSCODE` by `make deploy`.
 - **`/readyz` fails without `WORKSPACE_ID`** unless `DEMO=true` is set:

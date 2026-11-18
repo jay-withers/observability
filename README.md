@@ -224,6 +224,11 @@ data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
 the charts are drawn by `static/app.js` from the JSON the template embeds.
 `make app-run` serves it on demo data.
 
+Each app also has its own page, `/apps/<repo>`, with that app's deploys,
+checks, failed runs and crashes, spend and logged errors over the selected
+range, and `/apps` lists them all. Which rows belong to an app is set in
+`app/src/obsview/apps.py`: add a row there when a new app joins the estate.
+
 ## Costs
 
 The container app scales to zero, so it bills only while someone has it open.
