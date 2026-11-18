@@ -35,6 +35,15 @@ templates.env.globals["js_time"] = deployments.js_time
 RANGES = (7, 30, 90)
 DEFAULT_RANGE = 30
 
+
+# /readyz's query: the default view's own, which the start-up warm-up has
+# usually already cached. The shared smoke test calls /readyz once, with no
+# retry, so it should land on the cache rather than a cold query; a cold one
+# still proves the identity can read the table.
+def ready_query() -> tuple[str, timedelta]:
+    return deployments.kql(settings().environment), deployments.window(DEFAULT_RANGE)
+
+
 public = APIRouter()
 router = APIRouter()
 

@@ -4,12 +4,12 @@ output "resource_group_name" {
 }
 
 output "container_app_name" {
-  description = "Name of the Grafana container app, which `make deploy` passes to `az containerapp update`."
+  description = "Name of the obsview container app, which `make deploy` passes to `az containerapp update`."
   value       = azurerm_container_app.this.name
 }
 
-output "grafana_url" {
-  description = "Grafana's stable HTTPS URL: the custom domain when var.custom_domain_name is set."
+output "url" {
+  description = "obsview's stable HTTPS URL: the custom domain when var.custom_domain_name is set."
   value       = local.public_url
 }
 
@@ -19,7 +19,7 @@ output "default_url" {
 }
 
 output "custom_domain_name" {
-  description = "The custom domain bound to Grafana, if var.custom_domain_name is set. Empty otherwise."
+  description = "The custom domain bound to obsview, if var.custom_domain_name is set. Empty otherwise."
   value       = var.custom_domain_name
 }
 
@@ -32,8 +32,18 @@ output "custom_domain_verification_id" {
   sensitive   = true
 }
 
-output "admin_password" {
-  description = "Password for Grafana's `admin` user. `make admin-password` prints it."
-  value       = random_password.admin.result
+output "passcode" {
+  description = "obsview's passcode. `make passcode` prints it."
+  value       = random_password.passcode.result
   sensitive   = true
+}
+
+output "workspace_id" {
+  description = "The shared Log Analytics workspace's customer ID, which `make deploy` sets as obsview's WORKSPACE_ID."
+  value       = data.azurerm_log_analytics_workspace.platform.workspace_id
+}
+
+output "identity_client_id" {
+  description = "Client ID of the app's managed identity, which `make deploy` sets as AZURE_CLIENT_ID."
+  value       = azurerm_user_assigned_identity.this.client_id
 }

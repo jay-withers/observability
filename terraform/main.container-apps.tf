@@ -1,5 +1,5 @@
-# Grafana, on the shared platform environment but in this project's resource
-# group, like every tenant.
+# obsview (app/), on the shared platform environment but in this project's
+# resource group, like every tenant. Grafana ran here until the cutover.
 resource "azurerm_container_app" "this" {
   name                         = module.naming.container_app.name
   container_app_environment_id = data.azurerm_container_app_environment.platform.id
@@ -15,13 +15,23 @@ resource "azurerm_container_app" "this" {
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
 
+  # The one secret obsview reads, as APP_PASSCODE (`make deploy` maps it).
+  secret {
+    name  = "passcode"
+    value = random_password.passcode.result
+  }
+
+  # Grafana's admin password. Nothing reads it after the cutover, but a
+  # secret can't be removed while a revision's env still references it, and
+  # Grafana's env does until the first obsview deploy replaces it. Removed
+  # with grafana/ in the next change.
   secret {
     name  = "admin-password"
     value = random_password.admin.result
   }
 
   ingress {
-    # Public, behind Grafana's own login. Anonymous access and sign-up are off.
+    # Public, behind obsview's passcode.
     external_enabled = true
     target_port      = local.target_port
     transport        = "auto"
@@ -33,48 +43,36 @@ resource "azurerm_container_app" "this" {
   }
 
   template {
-    # **Scale to zero.** Grafana is opened a few times a week; a standing
-    # replica would be the platform's only standing cost. The
-    # price is a cold start of some seconds on the first page load. Alerting
-    # lives in Azure Monitor, so nothing depends on Grafana being awake.
+    # **Scale to zero.** Opened a few times a week; the price is a cold start
+    # of a few seconds on the first load. Alerting lives in Azure Monitor, so
+    # nothing depends on this being awake.
     min_replicas               = 0
     max_replicas               = 1
     cooldown_period_in_seconds = 900
 
     container {
-      name   = "grafana"
+      name   = "obsview"
       image  = local.image
       cpu    = local.container_cpu
       memory = local.container_memory
 
-      dynamic "env" {
-        for_each = local.grafana_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-
-      # Read by the first revision's placeholder image only (Grafana binds
-      # target_port itself), so the probes find it on the port they check.
+      # Read by the first revision's placeholder image only, so the probes
+      # find it on the port they check. Everything obsview reads is set by
+      # `make deploy` (see ignore_changes below).
       env {
         name  = "PORT"
         value = tostring(local.target_port)
       }
 
-      env {
-        name        = "GF_SECURITY_ADMIN_PASSWORD"
-        secret_name = "admin-password"
-      }
-
-      # /api/health checks Grafana's own database, so a SQLite file it cannot
-      # open shows as an unhealthy revision rather than a login page that
-      # errors.
+      # Both probes use /healthz, which answers from memory. /readyz reaches
+      # Log Analytics; the smoke test checks it once per deploy, but as the
+      # readiness probe a slow workspace would take the app out of rotation
+      # and hide the error page that explains it.
       liveness_probe {
         transport               = "HTTP"
         port                    = local.target_port
-        path                    = "/api/health"
-        initial_delay           = 10
+        path                    = "/healthz"
+        initial_delay           = 5
         interval_seconds        = 30
         timeout                 = 5
         failure_count_threshold = 3
@@ -83,7 +81,7 @@ resource "azurerm_container_app" "this" {
       readiness_probe {
         transport               = "HTTP"
         port                    = local.target_port
-        path                    = "/api/health"
+        path                    = "/healthz"
         interval_seconds        = 10
         timeout                 = 5
         failure_count_threshold = 3
@@ -94,11 +92,18 @@ resource "azurerm_container_app" "this" {
 
   tags = local.tags
 
-  # `make deploy` owns the running image after the first revision, as in every
-  # app repo here. Env stays managed by Terraform: nothing in it changes per
-  # release, and the dashboards ship inside the image.
+  # **`make deploy` owns the image and the env**, as gym-log's does, but with
+  # `--replace-env-vars` rather than its `--set-env-vars`: it sets IMAGE_TAG
+  # (what /healthz reports and the smoke test checks) alongside every other
+  # value obsview reads, taken
+  # from this config's outputs. Terraform managing the env as well would show
+  # IMAGE_TAG as drift on every plan. So a change to the env is a change to
+  # the Makefile's `deploy`, and lands on the next deploy.
   lifecycle {
-    ignore_changes = [template[0].container[0].image]
+    ignore_changes = [
+      template[0].container[0].image,
+      template[0].container[0].env,
+    ]
   }
 
   # So the first page load after the first apply can already query the

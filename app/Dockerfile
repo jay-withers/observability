@@ -3,7 +3,7 @@
 # The same two-stage shape as gym-log, from jay-withers/dev-containers. Keep the
 # two at the same version: python-app-builder is built FROM python-app, and a
 # virtualenv is bound to the minor Python that created it (market-agent's
-# "No module named" outage). Build for linux/amd64; `make app-build` does.
+# "No module named" outage). Build for linux/amd64; `make build` does.
 FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.21.27@sha256:09afa837a902faa1603c4ba73766cc471dc03949d58cd4907e092db55f53635b AS builder
 
 WORKDIR /app

@@ -32,10 +32,10 @@
 | [azurerm_role_assignment.workspace_reader](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_user_assigned_identity.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) | resource |
 | [random_password.admin](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
+| [random_password.passcode](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 | [azurerm_container_app_environment.platform](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/container_app_environment) | data source |
 | [azurerm_log_analytics_workspace.platform](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/log_analytics_workspace) | data source |
 | [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/resource_group) | data source |
-| [azurerm_subscription.current](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/subscription) | data source |
 
 ## Inputs
 
@@ -53,11 +53,13 @@
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_admin_password"></a> [admin\_password](#output\_admin\_password) | Password for Grafana's `admin` user. `make admin-password` prints it. |
-| <a name="output_container_app_name"></a> [container\_app\_name](#output\_container\_app\_name) | Name of the Grafana container app, which `make deploy` passes to `az containerapp update`. |
-| <a name="output_custom_domain_name"></a> [custom\_domain\_name](#output\_custom\_domain\_name) | The custom domain bound to Grafana, if var.custom\_domain\_name is set. Empty otherwise. |
+| <a name="output_container_app_name"></a> [container\_app\_name](#output\_container\_app\_name) | Name of the obsview container app, which `make deploy` passes to `az containerapp update`. |
+| <a name="output_custom_domain_name"></a> [custom\_domain\_name](#output\_custom\_domain\_name) | The custom domain bound to obsview, if var.custom\_domain\_name is set. Empty otherwise. |
 | <a name="output_custom_domain_verification_id"></a> [custom\_domain\_verification\_id](#output\_custom\_domain\_verification\_id) | Domain verification ID, published as the `asuid.<label>` TXT record before apply. |
 | <a name="output_default_url"></a> [default\_url](#output\_default\_url) | The app's default `*.azurecontainerapps.io` URL, which the custom domain's CNAME points at and the smoke test checks. |
-| <a name="output_grafana_url"></a> [grafana\_url](#output\_grafana\_url) | Grafana's stable HTTPS URL: the custom domain when var.custom\_domain\_name is set. |
+| <a name="output_identity_client_id"></a> [identity\_client\_id](#output\_identity\_client\_id) | Client ID of the app's managed identity, which `make deploy` sets as AZURE\_CLIENT\_ID. |
+| <a name="output_passcode"></a> [passcode](#output\_passcode) | obsview's passcode. `make passcode` prints it. |
 | <a name="output_resource_group_name"></a> [resource\_group\_name](#output\_resource\_group\_name) | This project's resource group. |
+| <a name="output_url"></a> [url](#output\_url) | obsview's stable HTTPS URL: the custom domain when var.custom\_domain\_name is set. |
+| <a name="output_workspace_id"></a> [workspace\_id](#output\_workspace\_id) | The shared Log Analytics workspace's customer ID, which `make deploy` sets as obsview's WORKSPACE\_ID. |
 <!-- END_TF_DOCS -->

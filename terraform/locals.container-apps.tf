@@ -1,7 +1,7 @@
 locals {
-  # **The first revision runs a placeholder, not Grafana.** Terraform only
+  # **The first revision runs a placeholder, not obsview.** Terraform only
   # needs an image to create the app; the first `make deploy` (cd-publish, on
-  # the first release) puts Grafana on, and the image is under
+  # the first release) puts obsview on, and the image is under
   # `ignore_changes`, so Terraform never touches it again. The placeholder
   # answers 200 on every path on $PORT, so the probes pass. This replaced
   # seeding from a release tag, which had to be guessed (v0.1.0 here, not
@@ -12,48 +12,19 @@ locals {
   # nothing) can't apply to an image used only at create.
   image = "ghcr.io/jay-withers/dev-containers/placeholder:latest"
 
-  # Grafana's default port; the Dockerfile EXPOSEs it and both probes check it.
-  target_port = 3000
+  # obsview's port (`obsview serve`); the Dockerfile EXPOSEs it and both
+  # probes check it.
+  target_port = 8000
 
-  # Grafana's documented minimum is 512 MiB; it idles well under that, and at
-  # scale to zero the size only bills while someone is looking at it.
-  container_cpu    = 0.5
-  container_memory = "1Gi"
+  # The smallest combination Container Apps accepts. obsview idles at a
+  # fraction of it, and at scale to zero it bills only while open.
+  container_cpu    = 0.25
+  container_memory = "0.5Gi"
 
   # Known before the app exists: an app's ingress FQDN is its name under the
-  # environment's default domain. Grafana builds every link and redirect from
-  # its root URL, so it has to be the one people use: the custom domain when
+  # environment's default domain. `make url` prints the custom domain when
   # one is set. The default URL keeps working either way, and the smoke test
   # uses it, so a deploy never depends on the certificate being bound.
   default_url = "https://${module.naming.container_app.name}.${data.azurerm_container_app_environment.platform.default_domain}"
   public_url  = var.custom_domain_name != "" ? "https://${var.custom_domain_name}" : local.default_url
-
-  # Everything Grafana needs that is not a secret. Its provisioning files
-  # (grafana/provisioning) read the AZURE_* and WORKSPACE_* values, so the
-  # data source points at this subscription and workspace without either
-  # being committed.
-  grafana_env = {
-    GF_SERVER_ROOT_URL = local.public_url
-
-    # No GF_DATABASE_*: Grafana keeps its state in its default SQLite file on
-    # the replica's own disk, so it starts empty on every new replica. Nothing
-    # is lost. The dashboards and data source are provisioned from the image,
-    # and the admin's password comes from GF_SECURITY_ADMIN_PASSWORD on every
-    # start. What doesn't survive is UI-only state (preferences, starred
-    # dashboards), which a server billing every hour wasn't worth keeping.
-
-    # One local admin, by the decision recorded in the README: no Entra app
-    # registration. Sign-up and anonymous access stay off.
-    GF_SECURITY_ADMIN_USER         = "admin"
-    GF_USERS_ALLOW_SIGN_UP         = "false"
-    GF_AUTH_ANONYMOUS_ENABLED      = "false"
-    GF_SECURITY_COOKIE_SECURE      = "true"
-    GF_ANALYTICS_REPORTING_ENABLED = "false"
-
-    # The Azure Monitor data source authenticates as this app's identity.
-    GF_AZURE_MANAGED_IDENTITY_ENABLED   = "true"
-    GF_AZURE_MANAGED_IDENTITY_CLIENT_ID = azurerm_user_assigned_identity.this.client_id
-    AZURE_SUBSCRIPTION_ID               = data.azurerm_subscription.current.subscription_id
-    WORKSPACE_RESOURCE_ID               = data.azurerm_log_analytics_workspace.platform.id
-  }
 }

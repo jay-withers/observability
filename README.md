@@ -1,6 +1,6 @@
 # observability
 
-Grafana over the shared Log Analytics workspace, for every app on the
+Dashboards over the shared Log Analytics workspace, for every app on the
 [shared Container Apps environment](https://github.com/jay-withers/azure-container-apps):
 did the last deploy work, is the app healthy, are its jobs running, and what
 is it costing.
@@ -24,9 +24,9 @@ Later phases add app health and delivery.
 
 ## obsview: the replacement for Grafana
 
-`app/` is **obsview**, a small FastAPI app that is replacing Grafana: the
-same tables, with charts designed for them, built for a phone. It is
-being built in steps:
+`app/` is **obsview**, a small FastAPI app that replaced Grafana: the same
+tables, with charts designed for them, built for a phone. It was built in
+steps:
 
 1. **Deployments**: KPI tiles with sparklines and deltas against the
    previous period, outcomes per day, a per-app deploy timeline, a 13-week
@@ -38,13 +38,12 @@ being built in steps:
    date against forecast and the $150 budget as one bullet bar, daily spend
    stacked by area, a treemap of the month (area, resource group, service),
    the top resource groups and services, and the session resources.
-3. Terraform points the container app at it (a `terraform-pending` apply).
-4. Grafana, its image and the Grafana Cloud sync are removed.
+3. **The cutover**: the container app runs obsview
+   (`ghcr.io/jay-withers/observability/obsview`).
+4. Next: Grafana, its image and the Grafana Cloud sync are removed.
 
-Steps 1 and 2 are published as `ghcr.io/jay-withers/observability/obsview`;
-nothing runs it until step 3. (Grafana Cloud was never set up, so the
-views come first: the cutover must not leave Jobs and ops or Costs with
-nowhere to live.)
+(Grafana Cloud was never set up, so the views came before the cutover: it
+could not leave Jobs and ops or Costs with nowhere to live.)
 
 How it works:
 
@@ -72,21 +71,17 @@ scripts' tests.
 
 ## How it fits together
 
-- **Grafana** runs as a scale-to-zero container app on the shared environment,
-  in this repo's own resource group (`rg-observability-dev`). The first page
-  load after an idle spell waits on a cold start.
-- **Its state** is Grafana's default SQLite file on the replica's own disk,
-  so it starts empty on every new replica. Dashboards, the data source and the
-  admin password all come back from the image and the app's settings, so
-  only UI preferences are lost. No database server, so nothing bills while
-  it sleeps.
+- **obsview** runs as a scale-to-zero container app on the shared
+  environment, in this repo's own resource group (`rg-observability-dev`).
+  The first page load after an idle spell waits on a cold start, which is
+  accepted: it is opened a few times a week.
+- **It keeps no state.** Every view is computed from the workspace on
+  request, and cached in memory for five minutes.
 - **What it reads** is the shared workspace, as its own managed identity
   (`Log Analytics Reader` on the workspace and nothing else).
-- **Dashboards and the data source are files in `grafana/`, baked into the
-  image.** They are read-only in the UI: change them here, by pull request.
-  The panels name the workspace by resource ID, which `grafana/entrypoint.sh`
-  fills in at start-up from `WORKSPACE_RESOURCE_ID`, so the JSON in git
-  carries no subscription.
+- **The views are code in `app/`** (see "Changing a view" below). The
+  Grafana dashboards under `grafana/` are no longer deployed, and go in the
+  next change.
 - **Certificate expiry is checked here, nightly.** `schedule-expiry.yml` runs
   `scripts/check-expiry.sh` over `scripts/expiry-hosts.txt` (a TLS handshake
   per host, which doesn't wake a scale-to-zero app) and records one
@@ -121,10 +116,11 @@ scripts' tests.
   Reader is enough for Resource Graph and Cost Management. `make costs` prints
   the rows locally.
 - **Alerting is not here.** It stays in Azure Monitor (azure-container-apps),
-  so nothing depends on Grafana being awake.
+  so nothing depends on the app being awake.
 
-Sign in as `admin` with the password from `make admin-password`. There is no
-Entra single sign-on, by decision: it would need an app registration.
+Sign in with the passcode from `make passcode`. The session lasts 30 days.
+There is no Entra single sign-on, by decision: it would need an app
+registration.
 
 ## First-time setup
 
@@ -133,13 +129,13 @@ In order, once:
 1. **github-repos** already lists this repo as a state consumer, so the OIDC
    identity and the `dev` environment's `AZURE_*` variables exist.
 2. **Merge the first pull request.** `cd-tag` releases and publishes
-   `ghcr.io/jay-withers/observability/grafana`. Its deploy job fails, because
+   `ghcr.io/jay-withers/observability/obsview`. Its deploy job fails, because
    the app does not exist yet: expected, and the `deploy-failed` issue closes
    on the next successful deploy. Terraform never names a release: it creates
    the app on dev-containers' `placeholder` image, which answers 200 on every
-   path, and the first deploy puts Grafana on.
+   path, and the first deploy puts obsview on.
 3. **Make the package public**: GitHub → your packages →
-   `observability/grafana` → Package settings → Change visibility. New
+   `observability/obsview` → Package settings → Change visibility. New
    packages start private whatever the repository's visibility, and the
    container app has no pull secret.
 4. **`make apply` locally** (as yourself, `az login` first). It creates the
@@ -154,12 +150,12 @@ In order, once:
    local apply creating the group; on a rebuild, do this before step 4.) From then on cd-terraform
    applies, cd-publish deploys, and every deploy is recorded like any app's.
    Re-run the failed deploy from step 2 (or `make deploy IMAGE_TAG=<release>`)
-   to replace the placeholder with Grafana.
-6. **`make url`**, sign in, open *Platform → Deployments*.
+   to replace the placeholder with obsview.
+6. **`make url`**, and sign in with `make passcode`.
 
 ## The custom domain
 
-Grafana is served at `observability.jaywithers.uk` (`custom_domain_name` in
+obsview is served at `observability.jaywithers.uk` (`custom_domain_name` in
 `environments/dev.tfvars`) with a free Azure-managed certificate, the same
 way finances, gym-log and career are. Its CNAME and `asuid` TXT records are
 the `observability` entry in [jay-withers/cloudflare](https://github.com/jay-withers/cloudflare)'s `app_domains`, **DNS
@@ -169,8 +165,8 @@ what they should be). Both must resolve before the apply.
 Adding or changing the domain is a **local** `make apply`, then
 `make bind-domain`: the certificate is created in the platform's resource
 group, which cd-terraform's identity cannot write to, and the provider cannot
-finish the bind itself (hashicorp/terraform-provider-azurerm#27362). Grafana's
-root URL moves to the domain in the same apply, so its links point there.
+finish the bind itself (hashicorp/terraform-provider-azurerm#27362).
+obsview's links are all relative, so it needs no setting for its own URL.
 The default `*.azurecontainerapps.io` URL keeps working, and the smoke test
 uses it.
 
@@ -232,22 +228,23 @@ Set up once, in order:
 ```bash
 make install          # mise tools and pre-commit hooks
 make lint             # every hook against every file
-make test             # the check scripts' tests (bash and jq, Azure stubbed out)
+make test             # the app's tests and the check scripts' tests (Azure stubbed out)
+make app-run          # serve obsview locally (demo data unless app/.env sets WORKSPACE_ID)
 make validate         # terraform init (no backend) + validate
 make init             # terraform init against dev's backend
 make fmt              # terraform fmt -recursive
 make plan             # terraform plan for dev
 make apply            # the first apply, and custom-domain changes; cd-terraform otherwise
 make outputs          # this deployment's outputs
-make build            # build the Grafana image for linux/amd64
+make build            # build the obsview image for linux/amd64
 make push             # push it to ghcr.io (needs write:packages)
 make deploy IMAGE_TAG=vX.Y.Z
-make deployed-tag     # the image tag live on Grafana
+make deployed-tag     # the image tag live on obsview
 make smoke IMAGE_TAG=vX.Y.Z
-make url              # Grafana's URL
+make url              # obsview's URL
 make dns              # the DNS records the custom domain needs
 make bind-domain      # finish binding the managed certificate after an apply
-make admin-password   # the admin password
+make passcode         # obsview's passcode
 make expiry           # the TLS expiry rows schedule-expiry would record
 make sessions         # the session-resource rows schedule-session-resources would record
 make costs            # the Costs_CL rows schedule-costs would record
@@ -260,12 +257,13 @@ Every workflow calls a shared one in
 SHA, apart from the scheduled checks and `cd-grafana-cloud`, which run this
 repo's scripts.
 
-- **ci-pre-commit**, **ci-container-build** (build plus Trivy) and
+- **ci-pre-commit**, **ci-python** (obsview's tests), **ci-container-build** (build plus Trivy) and
   **ci-terraform** (validate, then a real plan of dev on the PR) on pull
   requests. **ci-codeql** scans the workflows.
 - **cd-tag** → **cd-publish**: a release on every merge, publishing
-  `ghcr.io/jay-withers/observability/grafana` and deploying it with a smoke
-  test and rollback, like any app.
+  `ghcr.io/jay-withers/observability/obsview` and deploying it with the
+  shared smoke test and rollback, like any app. The Grafana image is still
+  built until `grafana/` goes.
 - **cd-terraform**: plans dev on merge and opens a `terraform-pending` issue;
   run it by hand to apply.
 - **cd-grafana-cloud**: syncs the dashboards to Grafana Cloud (above).
@@ -275,15 +273,17 @@ repo's scripts.
 - **schedule-drift**: a nightly plan of dev, recorded in `OpsEvents_CL`.
 - **manual-terraform-unlock**: releases a stuck state lock.
 
-## Changing a dashboard
+## Changing a view
 
-Edit the JSON under `grafana/dashboards/`, keeping `__WORKSPACE_RESOURCE_ID__`
-in each query's `resources`. To work on one interactively, export it from a
-local Grafana (`make build`, then run the image with `WORKSPACE_RESOURCE_ID`
-set) and replace the workspace ID with the placeholder before committing.
+A view is one KQL query for raw rows (`kql` and `window` in its module under
+`app/src/obsview/`) and a pure function that turns them into tiles and chart
+data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
+the charts are drawn by `static/app.js` from the JSON the template embeds.
+`make app-run` serves it on demo data. The Grafana dashboards under
+`grafana/dashboards/` are no longer deployed to the container app.
 
 ## Costs
 
 The container app scales to zero, so it bills only while someone has it open.
-Its database is a SQLite file inside the container, so it has no cost of its own. The scheduled checks run on GitHub-hosted runners and
+It keeps no database, so it has no cost of its own. The scheduled checks run on GitHub-hosted runners and
 add a few hundred rows a night to the workspace, inside its free grant.
