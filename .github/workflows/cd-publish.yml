@@ -83,4 +83,7 @@ jobs:
     uses: jay-withers/workflows/.github/workflows/container-apps-deploy.yml@b62ee5b1bb9038ec8b9827ec3c93c818c8d0da5b # v1.30.0
     with:
       version: ${{ inputs.version }}
+      # Load the home page (it redirects to /login) in Chromium during the
+      # smoke test: a broken template or a CSP block rolls the release back.
+      browser-check: true
       verify-images: ghcr.io/${{ github.repository }}/obsview

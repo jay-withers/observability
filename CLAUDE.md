@@ -45,8 +45,10 @@ and workspace resolved by name, never by remote state.
 - **The app repos' shared smoke test** (jay-withers/workflows'
   `scripts/smoke.sh`, which `make smoke` fetches at the commit cd-publish
   pins; no copy here): `/healthz` must report the tag, then `/readyz`, which queries
-  the workspace as the app's identity, must answer 200. Grafana had a smoke
-  test of its own until the cutover.
+  the workspace as the app's identity, must answer 200. With
+  `browser-check: true` in cd-publish it then loads `/` (the login page,
+  unauthenticated) in Chromium, and any console error rolls the release back.
+  Grafana had a smoke test of its own until the cutover.
 
 ## Traps
 
