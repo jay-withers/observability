@@ -129,13 +129,23 @@ deployed-tag: ## Print the image tag live on obsview
 		--query 'properties.template.containers[0].image' -o tsv \
 		| sed -n 's|^$(IMAGE_REGISTRY)/obsview:||p'
 
+# The smoke test is jay-withers/workflows' scripts/smoke.sh, fetched at the
+# commit cd-publish pins container-apps-deploy.yml to: one copy for every app
+# repo, the same version in CI and in a local run, and Renovate's bump of that
+# pin moves it.
+WORKFLOWS_SHA = $(shell sed -n 's|.*container-apps-deploy\.yml@\([0-9a-f]\{40\}\).*|\1|p' .github/workflows/cd-publish.yml | head -n 1)
+SMOKE_SH_URL = https://raw.githubusercontent.com/jay-withers/workflows/$(WORKFLOWS_SHA)/scripts/smoke.sh
+
 # The app repos' shared smoke test: /healthz must report IMAGE_TAG, then
 # /readyz (which queries the workspace) must answer 200.
 smoke: ## Check IMAGE_TAG is live on obsview and it can read the workspace (IMAGE_TAG required)
 	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
 		echo "error: pass the tag to check, e.g. make smoke IMAGE_TAG=v0.1.0" >&2; exit 1; fi
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
-	scripts/smoke.sh $(IMAGE_TAG) \
+	@[ -n "$(WORKFLOWS_SHA)" ] || { echo "smoke: no container-apps-deploy.yml@<sha> pin in .github/workflows/cd-publish.yml" >&2; exit 1; }
+	@script="$$(mktemp)"; trap 'rm -f "$$script"' EXIT; \
+	curl -fsSL --retry 3 -o "$$script" "$(SMOKE_SH_URL)" || { echo "smoke: can't fetch $(SMOKE_SH_URL)" >&2; exit 1; }; \
+	bash "$$script" $(IMAGE_TAG) \
 		"$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
 		$(IMAGE_REGISTRY)/obsview \
 		app:"$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)"
