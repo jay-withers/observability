@@ -16,7 +16,8 @@
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
-  --series-4: #6250d6;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
   --seq-1: #cde2fb;
   --seq-2: #86b6ef;
   --seq-3: #3987e5;
@@ -28,6 +29,8 @@
   --status-critical: #d03b3b;
   --status-neutral: #898781;
   --radius: 14px;
+  /* The forecast past what is spent: the spent colour, faded towards the track. */
+  --forecast: color-mix(in srgb, var(--series-1) 35%, var(--grid));
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -45,7 +48,8 @@
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
-    --series-4: #9085e9;
+    --series-4: #c98500;
+    --series-5: #d55181;
     --seq-1: #1f2a38;
     --seq-2: #184f95;
     --seq-3: #256abf;
@@ -171,3 +175,67 @@ ol.recent a:hover .what { text-decoration: underline; }
 .login .error { color: var(--bad-text); font-size: 14px; margin: 0 0 8px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* --- statuses (ops and costs) ----------------------------------------------
+   Status colours always come with the status word, never alone. */
+.st-ok { --dot: var(--status-good); }
+.st-removed, .st-pending { --dot: var(--status-neutral); }
+.st-overdue, .st-drifted, .st-expiring, .st-running { --dot: var(--status-warning); }
+.st-failed { --dot: var(--status-critical); }
+.st-fill-ok { background: var(--status-good); }
+.st-fill-expiring { background: var(--status-warning); }
+.st-fill-failed { background: var(--status-critical); }
+
+.hero { border-radius: var(--radius); padding: 14px 16px; box-shadow: 0 0 0 1px var(--ring); }
+.hero.good { background: color-mix(in srgb, var(--status-good) 12%, var(--surface)); }
+.hero.bad { background: color-mix(in srgb, var(--status-warning) 14%, var(--surface)); }
+.hero-head { display: flex; gap: 12px; align-items: center; }
+.hero-icon { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; }
+.hero.good .hero-icon { background: var(--status-good); }
+.hero.bad .hero-icon { background: var(--status-warning); color: #0b0b0b; }
+.hero-title { font-size: 18px; font-weight: 650; }
+.hero-sub { font-size: 13px; color: var(--ink-2); }
+ul.problems { list-style: none; margin: 12px 0 0; padding: 0; }
+ul.problems li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--ring); }
+ul.problems .what { font-weight: 550; }
+ul.problems .what small { color: var(--ink-2); font-weight: 400; }
+ul.problems .how { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
+
+.tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 900px) { .tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+a.card.tile { text-decoration: none; }
+a.card.tile:hover { box-shadow: 0 0 0 1px var(--axis); }
+.tile .value.warn { color: var(--bad-text); }
+.tile .value.small { font-size: 16px; margin-top: 8px; }
+
+.section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.section { scroll-margin-top: 80px; }
+details.rows { margin-top: 6px; }
+details.rows summary { cursor: pointer; font-size: 13px; color: var(--ink-2); padding: 6px 0; }
+
+ul.gauges, ul.hbars { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.gauge-label, .hbar-label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.gauge-label span:first-child, .hbar-label span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+.gauge-track, .hbar-track { position: relative; height: 8px; border-radius: 4px; background: var(--grid); }
+.gauge-track i, .hbar-track i { display: block; height: 100%; border-radius: 4px; }
+.gauge-track b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-2); }
+
+.budget-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 24px; }
+.budget .label { font-size: 12px; color: var(--ink-2); }
+.hero-number { font-size: 36px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+.budget-side { display: grid; gap: 2px; font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.budget-side b.over { color: var(--bad-text); }
+@media (max-width: 560px) { .budget-side { text-align: left; } }
+.bullet { position: relative; height: 18px; border-radius: 6px; background: var(--grid); margin-top: 14px; }
+.bullet i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+.bullet i.forecast { background: var(--forecast); }
+.bullet i.spent { background: var(--series-1); }
+.bullet b.limit { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
+
+.area-1 { background: var(--series-1); }
+.area-2 { background: var(--series-2); }
+.area-3 { background: var(--series-3); }
+.area-4 { background: var(--series-4); }
+.area-5 { background: var(--series-5); }
+.chart.tall { height: 340px; }

@@ -18,8 +18,8 @@
     <a class="brand" href="/">Observability <span class="env">{{ environment }}</span></a>
     <nav class="tabs" aria-label="Views">
       <a href="/deployments?days={{ days }}" {% if page == "deployments" %}aria-current="page"{% endif %}>Deployments</a>
-      <span title="Coming next">Jobs &amp; ops</span>
-      <span title="Coming next">Costs</span>
+      <a href="/ops?days={{ days }}" {% if page == "ops" %}aria-current="page"{% endif %}>Jobs &amp; ops</a>
+      <a href="/costs?days={{ days }}" {% if page == "costs" %}aria-current="page"{% endif %}>Costs</a>
     </nav>
     {% if days %}
     <div class="range" role="group" aria-label="Time range">

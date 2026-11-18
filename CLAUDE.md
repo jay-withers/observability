@@ -14,8 +14,8 @@ observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
 traps.
 
 **Grafana is being replaced by obsview** (`app/`, README "obsview"), a
-FastAPI app in gym-log's shape. Step 1 (the app and its Deployments view) is
-built and published but not deployed; the container app still runs Grafana
+FastAPI app in gym-log's shape. Its three views (Deployments, Jobs and
+ops, Costs) are built and published but not deployed; the container app still runs Grafana
 until the Terraform cutover. Don't add Grafana dashboards: add the view to
 obsview.
 
@@ -100,10 +100,11 @@ and workspace resolved by name, never by remote state.
   up. The alert takes the latest row per Kind and Name, so dropping the `ok`
   rows would leave a deleted firewall's alert lit. A new category goes in the
   script's list *and* its KQL `case`.
-- **The Costs dashboard's areas are fixed groups of resource groups**, so
-  each keeps its colour whatever the month's ranking. A new resource group
-  falls into "landing zone and other" until it is added to the `case` in
-  every panel that groups by area.
+- **Cost areas are fixed groups of resource groups**, so each keeps its
+  colour whatever the month's ranking. A new resource group falls into
+  "landing zone and other" until it is added to `AREAS` in
+  `app/src/obsview/costs.py` (and, while Grafana's dashboards exist, the
+  `case` in every panel that groups by area).
 - **The check scripts are tested in pre-commit, not a workflow.**
   `tests/run.sh` (`make test`) runs each `tests/*.test.sh` against stub `az`,
   `curl`, `openssl` and `sleep` written onto PATH, and the `script-tests` hook
@@ -133,7 +134,16 @@ and workspace resolved by name, never by remote state.
   a `type="application/json"` block, and `headers.py` (copied verbatim from
   gym-log, keep it identical) sets the CSP.
 - **No `WORKSPACE_ID` means demo data** (`demo.py`), under a banner, so
-  `make app-run` and the route tests need no Azure.
+  `make app-run` and the route tests need no Azure. A new table a view reads
+  needs demo rows there too.
+- **Jobs and ops reads "now" as each check's latest row in 48 hours**, and
+  counts as problems exactly the statuses Grafana did (`ops.PROBLEMS`). A
+  status a check invents later reads as neutral (`ops.SEVERITY`), not ok.
+  Its status grid is capped at 30 days whatever the range.
+- **The Costs forecast divides by days with data, not days elapsed**, as
+  Grafana's did: the feed lags a day or two. The daily chart ends at the
+  last day with data for the same reason. The budget is `BUDGET`
+  (default 150).
 - **No Key Vault**, as for Grafana: the passcode is a container app secret
   in `APP_PASSCODE` (added in the Terraform cutover).
 

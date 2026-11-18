@@ -163,6 +163,94 @@
       });
     },
 
+    // One row per check, one column per day, coloured by the worst status
+    // that day. Empty cells are days with no row.
+    grid: function (el) {
+      var g = charts.grids[el.getAttribute("data-key")];
+      var narrow = el.clientWidth < 520;
+      var SEV = ["--status-good", "--status-neutral", "--status-warning", "--status-critical"];
+      return merge(base(), {
+        grid: { left: 8, right: 8, top: 4, bottom: 24, containLabel: true },
+        tooltip: merge(base().tooltip, {
+          formatter: function (p) {
+            var v = p.value;
+            return "<b>" + escapeHtml(g.names[v[1]]) + "</b><br>" +
+              escapeHtml(shortDate(charts.dates[v[0]])) + ": " + escapeHtml(v[3]);
+          },
+        }),
+        xAxis: merge(axisStyle(), {
+          type: "category", data: charts.dates.map(shortDate), splitLine: { show: false },
+          axisLabel: { color: token("--muted"), fontSize: 11, hideOverlap: true },
+        }),
+        yAxis: merge(axisStyle(), {
+          type: "category", data: g.names, splitLine: { show: false },
+          axisLabel: { color: token("--ink-2"), fontSize: 12, width: narrow ? 110 : 200, overflow: "truncate" },
+        }),
+        visualMap: {
+          type: "piecewise", show: false, dimension: 2,
+          pieces: SEV.map(function (t, i) { return { value: i, color: token(t) }; }),
+        },
+        series: [{
+          type: "heatmap", data: g.cells,
+          itemStyle: { borderColor: token("--surface"), borderWidth: 2, borderRadius: 3 },
+        }],
+      });
+    },
+
+    spend: function () {
+      var s = charts.spend;
+      var symbol = payload.symbol || "";
+      return merge(base(), {
+        grid: { left: 8, right: 8, top: 8, bottom: 24, containLabel: true },
+        tooltip: merge(base().tooltip, {
+          trigger: "axis",
+          valueFormatter: function (v) { return symbol + Number(v).toFixed(2); },
+        }),
+        xAxis: merge(axisStyle(), { type: "category", boundaryGap: false, data: s.dates.map(shortDate), splitLine: { show: false } }),
+        yAxis: merge(axisStyle(), { type: "value", axisLabel: { color: token("--muted"), fontSize: 11, formatter: symbol + "{value}" } }),
+        series: charts.areas.map(function (a, i) {
+          var colour = token("--series-" + (i + 1));
+          return {
+            name: a, type: "line", stack: "spend", symbol: "none", smooth: 0.2,
+            data: s.series[a],
+            lineStyle: { width: 1.5, color: colour },
+            itemStyle: { color: colour },
+            areaStyle: { color: colour, opacity: 0.85 },
+            emphasis: { focus: "series" },
+          };
+        }),
+      });
+    },
+
+    treemap: function () {
+      var symbol = payload.symbol || "";
+      var data = charts.treemap.map(function (node) {
+        var i = charts.areas.indexOf(node.name);
+        return merge(node, { itemStyle: { color: token("--series-" + (i + 1)) } });
+      });
+      return merge(base(), {
+        tooltip: merge(base().tooltip, {
+          formatter: function (p) {
+            var path = (p.treePathInfo || []).slice(1).map(function (n) { return escapeHtml(n.name); }).join(" › ");
+            return path + "<br><b>" + symbol + Number(p.value).toFixed(2) + "</b>";
+          },
+        }),
+        series: [{
+          type: "treemap", name: "All areas", data: data, roam: false, nodeClick: "zoomToNode",
+          top: 0, left: 0, right: 0, bottom: 28, leafDepth: 2,
+          breadcrumb: { bottom: 0, itemStyle: { color: token("--grid"), borderColor: token("--grid"), textStyle: { color: token("--ink") } } },
+          label: { fontSize: 12, color: "#fff", overflow: "truncate" },
+          upperLabel: { show: true, height: 20, color: "#fff", fontSize: 12 },
+          itemStyle: { borderColor: token("--surface"), borderWidth: 2, gapWidth: 2, borderRadius: 4 },
+          levels: [
+            { itemStyle: { borderWidth: 0, gapWidth: 3 } },
+            { colorSaturation: [0.35, 0.6], itemStyle: { gapWidth: 2, borderColorSaturation: 0.5 } },
+            { colorSaturation: [0.35, 0.5], itemStyle: { gapWidth: 1 } },
+          ],
+        }],
+      });
+    },
+
     lead: function () {
       return merge(base(), {
         grid: { left: 28, right: 8, top: 8, bottom: 24 },

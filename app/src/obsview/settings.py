@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # workspace is configured; set it explicitly to see the demo with one.
     demo: bool = False
 
+    # The monthly budget the Costs view measures against: the Visual Studio
+    # subscription's credit, in the cost feed's currency.
+    budget: float = 150.0
+
     # Query results are kept this long. The tables are written by daily jobs
     # and by deploys, so five minutes stale costs nothing and makes every
     # open after the first instant.
