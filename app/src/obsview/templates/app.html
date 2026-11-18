@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ app.title }} · Observability{% endblock %}
+{% macro status(s) %}<span class="badge st-{{ s }}">{{ s }}</span>{% endmacro %}
+{% block body %}
+<p class="crumb"><a href="/apps?days={{ days }}">Apps</a> ›</p>
+<h1>{{ app.title }}</h1>
+<p class="lede"><code>{{ app.slug }}</code>: its deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}.</p>
+<nav class="jump" aria-label="Sections">
+  <a href="#deployments">Deployments</a><a href="#ops">Jobs &amp; ops</a><a href="#costs">Costs</a><a href="#errors">Errors</a>
+</nav>
+
+<h2 class="section-title" id="errors">Errors</h2>
+<div class="card">
+  {% if errors is none %}
+  <p class="empty">Couldn't read the console logs just now; the rest of the page is current.</p>
+  {% elif errors %}
+  <ol class="recent">
+    {% for g in errors[:30] %}
+    <li>
+      <div class="what">{{ g.signature }} <small>{{ g.workload }}</small></div>
+      <div class="when" title="{{ g.last.isoformat() }}">{{ ago(g.last, now) }}</div>
+      <div class="how">{{ g.count }} time{{ "s" if g.count != 1 }}{% if g.count > 1 %}, first {{ ago(g.first, now) }}{% endif %} · <code class="sample">{{ g.sample }}</code></div>
+      <div>{{ status("failed") }}</div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if errors | length > 30 %}<p class="sub">And {{ errors | length - 30 }} more kinds of error.</p>{% endif %}
+  {% set grouped = errors | sum(attribute="count") %}
+  {% if error_total > grouped %}<p class="sub">{{ error_total }} error lines in all; grouped from the newest {{ error_cap }} of each app or job.</p>{% endif %}
+  {% else %}
+  <p class="empty">No errors logged in the last {{ days }} day{{ "s" if days != 1 }}.</p>
+  {% endif %}
+</div>
+
+<h2 class="section-title" id="deployments">Deployments</h2>
+{% with view = dview, group = "deploy", per_app = true %}
+{% include "_deployments.html" %}
+{% endwith %}
+
+<h2 class="section-title" id="ops">Jobs &amp; ops</h2>
+{% if oview is none %}
+<div class="card"><p class="empty">Couldn't read the checks just now; the rest of the page is current.</p></div>
+{% elif not oview.sections and oview.failed_runs is not none and not oview.failed_runs %}
+<div class="card"><p class="empty">No checks or failed runs for {{ app.title }} in this range.</p></div>
+{% else %}
+{% with view = oview, group = "ops", per_app = true %}
+{% include "_ops.html" %}
+{% endwith %}
+{% endif %}
+
+<h2 class="section-title" id="costs">Costs</h2>
+{% if cview is none %}
+<div class="card"><p class="empty">Couldn't read the costs just now; the rest of the page is current.</p></div>
+{% else %}
+<p class="sub">Resource group <code>{{ app.resource_group }}</code>, actual cost before any credit.</p>
+{% with view = cview, group = "costs", per_app = true %}
+{% include "_costs.html" %}
+{% endwith %}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="chart-data">{{ payload | tojson }}</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+{% endblock %}

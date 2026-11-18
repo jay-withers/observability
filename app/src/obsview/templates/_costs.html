@@ -1,0 +1,107 @@
+{# The costs panels, shared by /costs and each app's page. #}
+{% macro money(v) %}{{ view.symbol }}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{% macro status(s) %}<span class="badge st-{{ s }}">{{ s }}</span>{% endmacro %}
+{% set span = view.range_start.strftime("%-d %b") ~ (" – " ~ view.range_end.strftime("%-d %b") if view.range_end != view.range_start else "") %}
+{% if not per_app %}
+<section class="card budget" aria-label="{{ view.month_label }} against the budget">
+  <div class="budget-head">
+    <div>
+      <div class="label">{{ view.month_label }} to date</div>
+      <div class="hero-number">{{ money(view.month_to_date) }}</div>
+    </div>
+    <div class="budget-side">
+      {% if view.forecast is not none %}<div><span class="label">Forecast</span> <b class="{{ 'over' if view.forecast > view.budget else '' }}">{{ money(view.forecast) }}</b></div>{% endif %}
+      <div><span class="label">Budget</span> <b>{{ money(view.budget) }}</b> <span class="label">· {{ "%.0f" | format(view.budget_used) }}% used</span></div>
+    </div>
+  </div>
+  <div class="bullet" role="img" aria-label="{{ money(view.month_to_date) }} spent, forecast {{ money(view.forecast or 0) }}, budget {{ money(view.budget) }}">
+    {% if view.forecast is not none %}<i class="forecast" style="width: {{ view.scale(view.forecast) }}%"></i>{% endif %}
+    <i class="spent" style="width: {{ view.scale(view.month_to_date) }}%"></i>
+    <b class="limit" style="left: {{ view.scale(view.budget) }}%"></b>
+  </div>
+  <ul class="legend" style="margin-top:8px">
+    <li><span class="swatch" style="background: var(--series-1)"></span>Spent</li>
+    <li><span class="swatch" style="background: var(--forecast)"></span>Forecast to month end</li>
+    <li><span class="swatch" style="background: var(--ink); width:2px"></span>Budget</li>
+  </ul>
+</section>
+{% endif %}
+
+<section class="tiles four" style="margin-top:10px" aria-label="The range{% if not per_app %}, session resources and the feed{% endif %}">
+  <div class="card tile">
+    <div class="label">Spent, {{ span }}</div>
+    <div class="value">{{ money(view.total) }}</div>
+    {% if view.delta %}<div class="delta {{ view.tone }}">{{ view.delta }}</div>{% endif %}
+  </div>
+  {% if not per_app %}
+  <div class="card tile">
+    <div class="label">Session resources running</div>
+    <div class="value {{ 'warn' if view.running else '' }}">{{ view.running }}</div>
+  </div>
+  <div class="card tile">
+    <div class="label">Cost feed</div>
+    <div class="value small">{% if view.feed %}{{ status(view.feed.status) }}{% else %}<span class="badge st-failed">no row</span>{% endif %}</div>
+    {% if view.feed %}<div class="delta">{{ ago(view.feed.when, view.now) }}</div>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<div class="card" style="margin-top:10px">
+  <h2>Daily spend by area</h2>
+  <p class="sub">{{ span }}, stacked</p>
+  <ul class="legend">
+    {% for a in view.charts.areas %}<li><span class="swatch area-{{ loop.index }}"></span>{{ a }}</li>{% endfor %}
+  </ul>
+  <div class="chart" {% if group %}data-group="{{ group }}" {% endif %}data-chart="spend" role="img" aria-label="Daily spend, stacked by area"></div>
+</div>
+
+{% if view.charts.treemap %}
+<div class="card" style="margin-top:10px">
+  <h2>Where the money went</h2>
+  <p class="sub">{{ span }}. Area, then resource group, then service. Tap to zoom in.</p>
+  <div class="chart tall" {% if group %}data-group="{{ group }}" {% endif %}data-chart="treemap" role="img" aria-label="Treemap of the range's spend"></div>
+</div>
+{% endif %}
+
+<div class="grid halves">
+  <div class="card">
+    <h2>By resource group</h2>
+    <p class="sub">{{ span }}</p>
+    <ul class="hbars">
+      {% for b in view.groups %}
+      <li><div class="hbar-label"><span>{{ b.label }}</span><span class="num">{{ money(b.value) }}</span></div>
+        <div class="hbar-track"><i class="area-{{ view.charts.areas.index(b.area) + 1 }}" style="width: {{ b.width }}%"></i></div></li>
+      {% else %}<li class="empty">No spend in this range.</li>{% endfor %}
+    </ul>
+  </div>
+  <div class="card">
+    <h2>By service</h2>
+    <p class="sub">{{ span }}</p>
+    <ul class="hbars">
+      {% for b in view.services %}
+      <li><div class="hbar-label"><span>{{ b.label }}</span><span class="num">{{ money(b.value) }}</span></div>
+        <div class="hbar-track"><i style="width: {{ b.width }}%; background: var(--series-1)"></i></div></li>
+      {% else %}<li class="empty">No spend in this range.</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+
+{% if not per_app %}
+<h2 class="section-title">Session resources</h2>
+<div class="card">
+  {% if view.sessions %}
+  <ol class="recent">
+    {% for e in view.sessions %}
+    <li>
+      <div class="what">{{ e.name }}</div>
+      <div class="when">{{ ago(e.when, view.now) }}</div>
+      <div class="how">{{ e.detail }}</div>
+      <div>{{ status(e.status) }}</div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">No session check in the last 48 hours.</p>
+  {% endif %}
+</div>
+{% endif %}

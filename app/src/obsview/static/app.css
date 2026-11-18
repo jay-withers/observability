@@ -97,7 +97,7 @@ nav.tabs span { color: var(--muted); }
 @media (min-width: 720px) { header.top { position: sticky; top: 0; } }
 @media (max-width: 560px) {
   .range { margin-left: 0; width: 100%; justify-content: space-between; }
-  .range a { flex: 1; text-align: center; }
+  .range a { flex: 1; text-align: center; padding: 5px 2px; }
 }
 
 .banner { margin: 16px 0 0; padding: 10px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--status-warning) 18%, var(--surface)); font-size: 14px; }
@@ -239,3 +239,13 @@ ul.gauges, ul.hbars { list-style: none; margin: 8px 0 0; padding: 0; display: gr
 .area-4 { background: var(--series-4); }
 .area-5 { background: var(--series-5); }
 .chart.tall { height: 340px; }
+
+/* --- per-app pages ---------------------------------------------------------- */
+a.app-link { display: block; text-decoration: none; color: inherit; }
+a.app-link:hover, a.app-link:focus-visible { box-shadow: 0 0 0 2px var(--ink-2); }
+.app .name a { color: inherit; }
+.crumb { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+.crumb a { color: var(--ink-2); }
+nav.jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+nav.jump a { font-size: 13px; padding: 4px 10px; border-radius: 999px; color: var(--ink-2); text-decoration: none; box-shadow: 0 0 0 1px var(--ring); }
+code.sample { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }

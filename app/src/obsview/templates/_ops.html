@@ -1,0 +1,91 @@
+{# The ops panels, shared by /ops and each app's page. #}
+{% macro status(s) %}<span class="badge st-{{ s }}">{{ s }}</span>{% endmacro %}
+{% if view.problems %}
+<section class="hero bad" aria-label="Problems now">
+  <div class="hero-head"><span class="hero-icon" aria-hidden="true">!</span>
+    <div><div class="hero-title">{{ view.problems | length }} problem{{ "s" if view.problems | length != 1 }} now</div>
+    <div class="hero-sub">Latest row per check, last 48 hours</div></div></div>
+  <ul class="problems">
+    {% for e in view.problems %}
+    <li>
+      <div class="what">{{ e.name }} <small>{{ e.kind }}</small></div>
+      {{ status(e.status) }}
+      <div class="how">{{ e.detail }}{% if e.run_url %} · <a href="{{ e.run_url }}" rel="noopener" target="_blank">run</a>{% endif %}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="hero good" aria-label="Problems now">
+  <div class="hero-head"><span class="hero-icon" aria-hidden="true">✓</span>
+    <div><div class="hero-title">All clear</div>
+    <div class="hero-sub">Every check's latest result is ok</div></div></div>
+</section>
+{% endif %}
+
+{% if not per_app %}
+<section class="tiles four" aria-label="Counts" style="margin-top:10px">
+  {% for label, n, kind in view.tiles %}
+  <a class="card tile" href="#{{ kind }}">
+    <div class="label">{{ label }}</div>
+    <div class="value {{ 'warn' if n else '' }}">{{ n }}</div>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% for s in view.sections %}
+<div class="card section" id="{{ s.kind }}" style="margin-top:10px">
+  <div class="section-head">
+    <div><h2>{{ s.title }}</h2><p class="sub">{{ s.sub }}</p></div>
+    {% if s.problems %}<span class="badge st-{{ s.worst }}">{{ s.problems }} to look at</span>{% else %}<span class="badge st-ok">ok</span>{% endif %}
+  </div>
+  {% if s.kind == "expiry" and view.certificates %}
+  <ul class="gauges">
+    {% for c in view.certificates %}
+    <li>
+      <div class="gauge-label"><span>{{ c.name }}</span><span class="num">{{ c.days_left if c.days_left is not none else "–" }} days</span></div>
+      <div class="gauge-track"><i class="st-fill-{{ c.status }}" style="width: {{ c.width }}%"></i><b style="left: {{ 100 * 21 / 365 }}%" title="Warns at 21 days"></b></div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="chart grid-chart" {% if group %}data-group="{{ group }}" {% endif %}data-chart="grid" data-key="{{ s.kind }}"
+       style="height: {{ 46 + 26 * s.current | length }}px"
+       role="img" aria-label="{{ s.title }}: worst status per day"></div>
+  {% endif %}
+  <details class="rows" {% if s.problems %}open{% endif %}>
+    <summary>{{ s.current | length }} check{{ "s" if s.current | length != 1 }}</summary>
+    <ol class="recent">
+      {% for e in s.current %}
+      <li>
+        <div class="what">{{ e.name }}</div>
+        <div class="when">{{ ago(e.when, view.now) }}</div>
+        <div class="how">{{ e.detail }}{% if e.run_url %} · <a href="{{ e.run_url }}" rel="noopener" target="_blank">run</a>{% endif %}</div>
+        <div>{{ status(e.status) }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
+</div>
+{% endfor %}
+
+<h2 class="section-title">Failed runs and crashes</h2>
+<div class="card">
+  {% if view.failed_runs is none %}
+  <p class="empty">Couldn't read the failed runs just now; everything above is current. The app's logs have the detail.</p>
+  {% elif view.failed_runs %}
+  <ol class="recent">
+    {% for r in view.failed_runs %}
+    <li>
+      <div class="what">{{ r.job }} <small>{{ r.reason }}</small></div>
+      <div class="when">{{ ago(r.last, view.now) }}</div>
+      <div class="how">{{ r.failures }} failure{{ "s" if r.failures != 1 }} · {{ r.sample }}</div>
+      <div>{{ status("failed") }}</div>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">No failed job runs or crashed apps in the last {{ days }} day{{ 's' if days != 1 }}.</p>
+  {% endif %}
+</div>

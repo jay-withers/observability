@@ -9,7 +9,6 @@
   var source = document.getElementById("chart-data");
   if (!source || typeof echarts === "undefined") return;
   var payload = JSON.parse(source.textContent);
-  var charts = payload.charts;
   var now = new Date(payload.now);
   var instances = [];
 
@@ -57,7 +56,11 @@
   }
   function merge(a, b) { return Object.assign({}, a, b); }
 
-  var builders = {
+  // The builders for one set of chart data. An app's page carries several
+  // views' sets, keyed by group, and each chart element names its group with
+  // data-group; the estate views carry one set. Each builder (and every
+  // tooltip formatter it leaves behind) closes over its own set.
+  function buildersFor(charts) { return {
     outcomes: function () {
       var gap = token("--surface");
       return merge(base(), {
@@ -263,13 +266,16 @@
         }],
       });
     },
-  };
+  }; }
 
   function draw() {
     instances.forEach(function (i) { i.dispose(); });
     instances = [];
     document.querySelectorAll("[data-chart]").forEach(function (el) {
-      var build = builders[el.getAttribute("data-chart")];
+      var group = el.getAttribute("data-group");
+      var data = group ? (payload.groups || {})[group] : payload.charts;
+      if (!data) return;
+      var build = buildersFor(data)[el.getAttribute("data-chart")];
       if (!build) return;
       var chart = echarts.init(el, null, { renderer: "svg" });
       chart.setOption(build(el));
