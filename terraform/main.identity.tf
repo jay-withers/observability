@@ -1,4 +1,4 @@
-# The identity Grafana queries Azure Monitor as.
+# The identity obsview queries Log Analytics as.
 resource "azurerm_user_assigned_identity" "this" {
   name                = module.naming.user_assigned_identity.name
   resource_group_name = data.azurerm_resource_group.this.name
@@ -6,7 +6,7 @@ resource "azurerm_user_assigned_identity" "this" {
   tags                = local.tags
 }
 
-# Read-only on the shared workspace, which is everything Grafana shows: KQL
+# Read-only on the shared workspace, which is everything obsview shows: KQL
 # queries against Deployments_CL, OpsEvents_CL and the platform's own logs.
 #
 # A role assignment, so cd-terraform's identity cannot create it: the first

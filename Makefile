@@ -9,7 +9,7 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test app-test app-vendor app-run app-build init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain admin-password expiry sessions costs
+.PHONY: help install lint test app-test app-vendor app-run init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain passcode expiry sessions costs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -53,10 +53,6 @@ app-run: ## Serve the app on PORT (demo data unless app/.env sets WORKSPACE_ID)
 	@test -f app/vendor/echarts.min.js || $(MAKE) app-vendor
 	cd app && APP_PASSCODE=$${APP_PASSCODE:-local} uv run obsview serve --reload --port $(PORT)
 
-app-build: ## Build the obsview image for linux/amd64
-	docker buildx build --platform linux/amd64 --load \
-		-t $(IMAGE_REGISTRY)/obsview:$(IMAGE_TAG) app
-
 init: ## terraform init against ENV's backend
 	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl
 
@@ -79,49 +75,75 @@ apply: init ## terraform apply (ENV=dev). Local for the first apply only
 outputs: init ## Print this deployment's outputs
 	terraform -chdir=$(TF_DIR) output
 
-build: ## Build the Grafana image for linux/amd64 (set IMAGE_TAG, defaults to the git SHA)
+build: ## Build the obsview image for linux/amd64 (set IMAGE_TAG, defaults to the git SHA)
 	docker buildx build --platform linux/amd64 --load \
-		-t $(IMAGE_REGISTRY)/grafana:$(IMAGE_TAG) grafana
+		-t $(IMAGE_REGISTRY)/obsview:$(IMAGE_TAG) app
 
 push: ## Push the image to ghcr.io (needs write:packages)
 	gh auth token | docker login ghcr.io -u $$(gh api user --jq .login) --password-stdin
-	docker push $(IMAGE_REGISTRY)/grafana:$(IMAGE_TAG)
+	docker push $(IMAGE_REGISTRY)/obsview:$(IMAGE_TAG)
 
 # A bare `make deploy` is a hard error: the default tag is whatever commit is
 # checked out, which may never have been pushed.
-deploy: ## Roll an image tag onto Grafana (IMAGE_TAG required)
+#
+# **This sets the whole env** (`--replace-env-vars`, where gym-log uses
+# --set-env-vars), which Terraform ignores:
+# IMAGE_TAG changes every release, so it can't be Terraform's. The rest come
+# from Terraform's outputs, so this is the one place the env is written down.
+# Replacing rather than adding is also what cleared Grafana's GF_* values at
+# the cutover. A new setting goes here, and lands on the next deploy.
+deploy: ## Roll an image tag onto obsview, with its env (IMAGE_TAG required)
 	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
 		echo "error: pass a tag explicitly, e.g. make deploy IMAGE_TAG=v0.1.0" >&2; exit 1; fi
 	@case "$(IMAGE_TAG)" in latest|main|unset) \
 		echo "error: $(IMAGE_TAG) is a moving tag. Container Apps only creates a revision when the template changes, so re-pushing one deploys nothing and reports success." >&2; exit 1;; esac
 	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl
-	az containerapp update \
-		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)" \
-		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		--image $(IMAGE_REGISTRY)/grafana:$(IMAGE_TAG)
+	@# Every output read up front, each one checked: inside the update's
+	@# arguments a failed read would become an empty string, and
+	@# --replace-env-vars would write it over the good value.
+	set -eu; \
+	out() { v="$$(terraform -chdir=$(TF_DIR) output -raw "$$1")" && [ -n "$$v" ] \
+		|| { echo "error: terraform output $$1 is missing or empty; apply first" >&2; exit 1; }; \
+		printf '%s' "$$v"; }; \
+	app="$$(out container_app_name)"; \
+	rg="$$(out resource_group_name)"; \
+	workspace="$$(out workspace_id)"; \
+	client="$$(out identity_client_id)"; \
+	az containerapp update --name "$$app" --resource-group "$$rg" \
+		--image $(IMAGE_REGISTRY)/obsview:$(IMAGE_TAG) \
+		--replace-env-vars \
+			IMAGE_TAG=$(IMAGE_TAG) \
+			ENVIRONMENT=$(ENV) \
+			PORT=8000 \
+			WORKSPACE_ID="$$workspace" \
+			AZURE_CLIENT_ID="$$client" \
+			APP_PASSCODE=secretref:passcode
 
-# What cd-publish rolls back to when a deploy fails its smoke test: the tag
-# live now, or nothing on the first deploy.
-deployed-tag: ## Print the image tag live on Grafana
+# What cd-publish rolls back to when a deploy fails its smoke test: the obsview
+# tag live now, or nothing on the first deploy (the placeholder, or Grafana
+# before the cutover).
+deployed-tag: ## Print the image tag live on obsview
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
 	@az containerapp show \
 		--name "$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)" \
 		--resource-group "$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
 		--query 'properties.template.containers[0].image' -o tsv \
-		| sed -n 's|^$(IMAGE_REGISTRY)/grafana:||p'
+		| sed -n 's|^$(IMAGE_REGISTRY)/obsview:||p'
 
-smoke: ## Check IMAGE_TAG is live and Grafana reaches its database (IMAGE_TAG required)
+# The app repos' shared smoke test: /healthz must report IMAGE_TAG, then
+# /readyz (which queries the workspace) must answer 200.
+smoke: ## Check IMAGE_TAG is live on obsview and it can read the workspace (IMAGE_TAG required)
 	@if [ -z "$(IMAGE_TAG_EXPLICIT)" ]; then \
 		echo "error: pass the tag to check, e.g. make smoke IMAGE_TAG=v0.1.0" >&2; exit 1; fi
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
 	scripts/smoke.sh $(IMAGE_TAG) \
 		"$$(terraform -chdir=$(TF_DIR) output -raw resource_group_name)" \
-		$(IMAGE_REGISTRY)/grafana \
-		"$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)"
+		$(IMAGE_REGISTRY)/obsview \
+		app:"$$(terraform -chdir=$(TF_DIR) output -raw container_app_name)"
 
-url: ## Print Grafana's URL
+url: ## Print obsview's URL
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
-	@terraform -chdir=$(TF_DIR) output -raw grafana_url; echo
+	@terraform -chdir=$(TF_DIR) output -raw url; echo
 
 dns: ## Print the DNS records the custom domain needs
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
@@ -148,9 +170,9 @@ bind-domain: ## Finish binding the managed certificate (manual, see #27362)
 		az containerapp hostname bind --name "$$app" --resource-group "$$rg" \
 			--hostname "$$host" --certificate "$$cert_id" --environment "$$env_id"
 
-admin-password: ## Print the password of Grafana's admin user
+passcode: ## Print obsview's passcode
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
-	@terraform -chdir=$(TF_DIR) output -raw admin_password; echo
+	@terraform -chdir=$(TF_DIR) output -raw passcode; echo
 
 
 expiry: ## Print the TLS expiry rows schedule-expiry.yml would record

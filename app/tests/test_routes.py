@@ -221,3 +221,66 @@ def test_ops_page_survives_the_failed_runs_query_failing(
     assert response.status_code == 200
     assert "read the failed job runs" in response.text
     assert "Jobs and checks" in response.text
+
+
+def test_readyz_fails_without_a_workspace_unless_demo_is_explicit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fixture runs with no WORKSPACE_ID: demo data by default, which in
+    # Azure means a missing setting, so the smoke test must fail it.
+    response = client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json()["reason"] == "no WORKSPACE_ID"
+
+
+def test_readyz_reports_a_failing_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKSPACE_ID", "00000000-0000-0000-0000-000000000000")
+    monkeypatch.setenv("APP_PASSCODE", "sesame")
+    settings.cache_clear()
+    from obsview.api.main import create_app
+
+    use(monkeypatch, Failing())
+    monkeypatch.setattr(routes, "warm", lambda: None)
+    try:
+        with TestClient(create_app()) as c:
+            response = c.get("/readyz")
+    finally:
+        settings.cache_clear()
+    assert response.status_code == 503
+    assert "HttpResponseError" in response.json()["reason"]
+
+
+def test_readyz_passes_when_the_workspace_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKSPACE_ID", "00000000-0000-0000-0000-000000000000")
+    monkeypatch.setenv("APP_PASSCODE", "sesame")
+    settings.cache_clear()
+    from obsview.api.main import create_app
+
+    recording = Recording()
+    use(monkeypatch, recording)
+    monkeypatch.setattr(routes, "warm", lambda: None)
+    try:
+        with TestClient(create_app()) as c:
+            response = c.get("/readyz")
+    finally:
+        settings.cache_clear()
+    assert response.status_code == 200
+    assert recording.spans == [routes.ready_query()[1]]
+
+
+def test_readyz_passes_on_explicit_demo(monkeypatch: pytest.MonkeyPatch) -> None:
+    # DEMO=true with no workspace is a deliberate demo, not a misconfiguration.
+    monkeypatch.setenv("WORKSPACE_ID", "")
+    monkeypatch.setenv("DEMO", "true")
+    monkeypatch.setenv("APP_PASSCODE", "sesame")
+    settings.cache_clear()
+    routes._build_source.cache_clear()
+    from obsview.api.main import create_app
+
+    try:
+        with TestClient(create_app()) as c:
+            response = c.get("/readyz")
+    finally:
+        settings.cache_clear()
+        routes._build_source.cache_clear()
+    assert response.status_code == 200

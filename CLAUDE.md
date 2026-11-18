@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo does
 
-Grafana for the jay-withers Container Apps estate: a scale-to-zero container
-app on the shared environment, reading the shared Log Analytics workspace.
-It ships the Deployments dashboard over `Deployments_CL` (phase 1 of the
+Dashboards for the jay-withers Container Apps estate: a scale-to-zero
+container app on the shared environment, reading the shared Log Analytics
+workspace. It ships the Deployments view over `Deployments_CL` (phase 1 of the
 observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
 `Costs_CL`. It also runs the checks that feed them: `schedule-expiry`,
 `schedule-heartbeats`, `schedule-session-resources` and `schedule-costs`.
 `README.md` covers the why and the first-time setup; this file covers the
 traps.
 
-**Grafana is being replaced by obsview** (`app/`, README "obsview"), a
-FastAPI app in gym-log's shape. Its three views (Deployments, Jobs and
-ops, Costs) are built and published but not deployed; the container app still runs Grafana
-until the Terraform cutover. Don't add Grafana dashboards: add the view to
+**The container app runs obsview** (`app/`, README "obsview"), a FastAPI
+app in gym-log's shape that replaced Grafana, with all three views
+(Deployments, Jobs and ops, Costs). `grafana/`, its image and the Grafana
+Cloud sync are removed next. Don't add Grafana dashboards: add the view to
 obsview.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
@@ -25,48 +25,28 @@ and workspace resolved by name, never by remote state.
 
 ## Decisions not to re-litigate
 
-- **Dashboards and the data source ship inside the image** (`grafana/`), not
-  through the Grafana Terraform provider. That provider must reach a running
-  Grafana at plan time, and this one is created by the same apply and scales
-  to zero. Provisioned dashboards are read-only in the UI on purpose.
-- **`__WORKSPACE_RESOURCE_ID__` in dashboard JSON** is filled in by
-  `grafana/entrypoint.sh` at start-up. Grafana substitutes environment
-  variables in provisioning YAML but not in dashboard JSON. Never commit a
-  real workspace ID into a dashboard.
-- **The admin password is a container app secret from `random_password`**, never
-  a Key Vault secret: a Terraform-managed vault secret needs data-plane access
-  just to plan, which the pipeline identity lacks (the estate's documented
-  trap). No Key Vault exists here at all.
-- **Grafana's state is its default SQLite file, on the replica's disk**, not
-  a database server: a Postgres B1ms bills every hour to keep a single admin
-  login. A new replica starts empty, which loses only UI preferences: the
-  dashboards and data source are provisioned, and `GF_SECURITY_ADMIN_PASSWORD`
-  sets the admin on every start. Don't move it to an Azure Files mount:
-  SQLite's locking over SMB is the documented way to corrupt it.
-- **One local admin, no Entra SSO** (no app registration). Sign-up and
-  anonymous access are off.
-- **Moving to Grafana Cloud** (README, "Grafana Cloud") to remove the cold
-  start. Log Analytics stays the data source and Azure Monitor keeps
-  alerting. The stack is configured by `scripts/sync-grafana-cloud.sh` through
-  its API, not by the Grafana Terraform provider: this root plans in CI as
-  the Azure identity, and the provider would add a Grafana token to every
-  plan for no benefit. The stack reads the workspace as an app registration
-  with a client secret, created by hand (README), because Grafana Cloud
-  cannot use a managed identity and the pipeline identity cannot create app
-  registrations. This is a deliberate exception to "no app registration".
-  The container app above stays until the stack is verified, and is retired
-  in a separate change.
+- **The passcode is a container app secret from `random_password`**
+  (`make passcode`), never a Key Vault secret: a Terraform-managed vault
+  secret needs data-plane access just to plan, which the pipeline identity
+  lacks (the estate's documented trap). No Key Vault exists here at all.
+- **One shared passcode, no Entra SSO** (no app registration).
+- **Grafana Cloud was planned and never set up** (`GRAFANA_URL` was never
+  set, so `cd-grafana-cloud` always skipped). obsview replaced both it and
+  the self-hosted Grafana. `grafana/`, `cd-grafana-cloud.yml` and
+  `scripts/sync-grafana-cloud.sh` are dead code until the next change
+  removes them; don't extend them.
 - **Created on dev-containers' `placeholder:latest`, never a release tag.**
   Terraform needs an image before any release exists; a guessed tag (v0.0.1
   vs v0.1.0, observability#4) passes plan and apply and fails only on the
   pull. The placeholder answers 200 on every path on `$PORT`, which is why
-  `PORT` is set; Grafana ignores it. The first deploy puts Grafana on.
-- **Scale to zero.** Grafana is opened a few times a week. Alerting lives in
-  Azure Monitor, so nothing depends on it being awake.
-- **Its own smoke test** (`scripts/smoke.sh`), not the app repos' shared one,
-  which needs a `/healthz` reporting the release tag. This one checks the
-  configured image, that the latest revision is the ready one, and that
-  `/api/health` reports `"database": "ok"`.
+  `PORT` is set. The first deploy puts obsview on.
+- **Scale to zero**, cold start accepted (decided at the obsview cutover,
+  2026-11-17). It is opened a few times a week. Alerting lives in Azure
+  Monitor, so nothing depends on it being awake.
+- **The app repos' shared smoke test** (`scripts/smoke.sh`, verbatim from
+  gym-log): `/healthz` must report the tag, then `/readyz`, which queries
+  the workspace as the app's identity, must answer 200. Grafana had a smoke
+  test of its own until the cutover.
 
 ## Traps
 
@@ -80,21 +60,34 @@ and workspace resolved by name, never by remote state.
 - **New GHCR packages start private.** Flip `observability/grafana` (and
   `observability/obsview`, after its first publish) to public once after the
   first push; the app has no pull secret.
-- **`GF_SERVER_ROOT_URL` is computed**: the custom domain when
-  `custom_domain_name` is set, otherwise the app's name under the
-  environment's default domain, because the FQDN is not known until the app
-  exists and Grafana needs it for every link and redirect.
 - **The custom domain is a local apply plus `make bind-domain`.** The managed
   certificate is a child of the shared environment in `rg-platform-dev`,
   where cd-terraform's identity cannot write, and the provider cannot finish
   the bind (#27362). `certificate_binding_type` is under `ignore_changes`, or
   every plan would propose unbinding it. The DNS records are in
   jay-withers/cloudflare's `app_domains`, and must stay DNS only.
-- **Only the image is under `ignore_changes`.** Env is managed by Terraform:
-  nothing in it changes per release.
-- **The scheduled checks run as the pipeline identity, not Grafana's.**
+- **`make deploy` owns the image and the whole env**, and both are under
+  `ignore_changes`. Like gym-log, it sets `IMAGE_TAG` on each deploy, because
+  Terraform can't own a value that changes per release without showing
+  drift on every plan. **Unlike gym-log it uses `--replace-env-vars`**, not
+  `--set-env-vars`: every variable the app reads is listed there, and
+  anything not listed (a portal edit, Terraform's create-time `PORT`) is
+  dropped on the next deploy. A new setting goes in the Makefile's `deploy`
+  (values from Terraform outputs), and lands on the next deploy, not the
+  next apply. It reads every output before touching the app, so a missing
+  one stops the deploy instead of writing an empty value.
+- **The cutover order: apply, then deploy.** The obsview deploy needs the
+  `passcode` secret, port 8000 and the new outputs, which only the apply
+  creates, so a deploy run first stops at the output check and changes
+  nothing. Between the apply and the deploy the app is down: the revision
+  still runs Grafana's image, on obsview's port and probes.
+- **The `admin-password` secret and `random_password.admin` are Grafana's
+  leftovers.** Azure refuses to remove a secret that a revision's env still
+  references, and Grafana's env did until the first obsview deploy replaced
+  it. They go with `grafana/` in the next change.
+- **The scheduled checks run as the pipeline identity, not the app's.**
   Its subscription Reader is what reads Resource Graph and Cost Management.
-  Grafana's own identity has `Log Analytics Reader` on the workspace and
+  The app's own identity has `Log Analytics Reader` on the workspace and
   nothing else, and needs nothing more: costs reach it as `Costs_CL` rows.
 - **Every `session` category gets a row on every run**, `ok` when nothing is
   up. The alert takes the latest row per Kind and Name, so dropping the `ok`
@@ -144,8 +137,12 @@ and workspace resolved by name, never by remote state.
   Grafana's did: the feed lags a day or two. The daily chart ends at the
   last day with data for the same reason. The budget is `BUDGET`
   (default 150).
-- **No Key Vault**, as for Grafana: the passcode is a container app secret
-  in `APP_PASSCODE` (added in the Terraform cutover).
+- **No Key Vault**: the passcode is the container app secret `passcode`,
+  mapped to `APP_PASSCODE` by `make deploy`.
+- **`/readyz` fails without `WORKSPACE_ID`** unless `DEMO=true` is set:
+  demo data in Azure is a misconfiguration. It is checked by the smoke test,
+  not used as the readiness probe, so a slow workspace shows the app's error
+  page rather than taking it out of rotation.
 
 ## Terraform layout
 
@@ -172,8 +169,8 @@ SHA with the tag as a comment, the same set gym-log uses:
 - `ci-container-build`: builds `grafana/` and `app/` (image `obsview`)
   behind the `container-build` gate.
 - `cd-tag` → `cd-publish` (when `grafana/` or `app/` changed) →
-  `container-apps-deploy`. Both images are published; the deploy still rolls
-  Grafana until the cutover.
+  `container-apps-deploy`, which deploys and smoke-tests `obsview`. The
+  Grafana image is still built until `grafana/` goes.
 - `cd-terraform`: plans dev on merge; applies when run by hand.
 - `cd-grafana-cloud`: syncs `grafana/dashboards/` and the data source to the
   Grafana Cloud stack on merge and on demand. Skips with a notice while

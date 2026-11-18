@@ -6,8 +6,8 @@ data "azurerm_container_app_environment" "platform" {
   resource_group_name = var.platform_resource_group_name
 }
 
-# What Grafana reads: Deployments_CL, OpsEvents_CL and everything the platform
-# already collects.
+# What obsview reads: Deployments_CL, OpsEvents_CL, Costs_CL and everything
+# the platform already collects.
 data "azurerm_log_analytics_workspace" "platform" {
   name                = var.platform_workspace_name
   resource_group_name = var.platform_resource_group_name
@@ -19,6 +19,3 @@ data "azurerm_log_analytics_workspace" "platform" {
 data "azurerm_resource_group" "this" {
   name = module.naming.resource_group.name
 }
-
-# For the subscription the Azure Monitor data source queries.
-data "azurerm_subscription" "current" {}
