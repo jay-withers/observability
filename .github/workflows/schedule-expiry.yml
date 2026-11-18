@@ -3,7 +3,7 @@ name: schedule-expiry
 # Nightly TLS expiry check of every custom domain in scripts/expiry-hosts.txt,
 # recorded as one OpsEvents_CL row per host (Kind `expiry`, Status `ok`,
 # `expiring` or `failed`). The platform's alert on that table reports a bad
-# row; Grafana's Jobs and ops dashboard shows the days left per host. A host
+# row; obsview's Jobs and ops view shows the days left per host. A host
 # that fails or is expiring is still a green run: only a failed post fails it,
 # since a silent gap would look exactly like a clean night.
 #

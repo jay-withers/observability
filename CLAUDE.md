@@ -15,9 +15,8 @@ traps.
 
 **The container app runs obsview** (`app/`, README "obsview"), a FastAPI
 app in gym-log's shape that replaced Grafana, with all three views
-(Deployments, Jobs and ops, Costs). `grafana/`, its image and the Grafana
-Cloud sync are removed next. Don't add Grafana dashboards: add the view to
-obsview.
+(Deployments, Jobs and ops, Costs). Grafana, its image and the Grafana
+Cloud sync were removed after the cutover; a new view goes in obsview.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
 shaped like gym-log: its own resource group and identity, the environment
@@ -30,11 +29,11 @@ and workspace resolved by name, never by remote state.
   secret needs data-plane access just to plan, which the pipeline identity
   lacks (the estate's documented trap). No Key Vault exists here at all.
 - **One shared passcode, no Entra SSO** (no app registration).
-- **Grafana Cloud was planned and never set up** (`GRAFANA_URL` was never
-  set, so `cd-grafana-cloud` always skipped). obsview replaced both it and
-  the self-hosted Grafana. `grafana/`, `cd-grafana-cloud.yml` and
-  `scripts/sync-grafana-cloud.sh` are dead code until the next change
-  removes them; don't extend them.
+- **obsview, not Grafana.** The self-hosted Grafana's views were stat
+  tiles and tables, slow to open and poor on a phone; obsview replaced it
+  (2026-11-17). A move to Grafana Cloud was planned and never set up, so
+  there is no stack or app registration to clean up. The old
+  `observability/grafana` GHCR package is no longer built or deployed.
 - **Created on dev-containers' `placeholder:latest`, never a release tag.**
   Terraform needs an image before any release exists; a guessed tag (v0.0.1
   vs v0.1.0, observability#4) passes plan and apply and fails only on the
@@ -57,9 +56,9 @@ and workspace resolved by name, never by remote state.
   the original from state. The `Log Analytics Reader` assignment on the
   platform's workspace is outside the group, so changing it is still a local
   apply.
-- **New GHCR packages start private.** Flip `observability/grafana` (and
-  `observability/obsview`, after its first publish) to public once after the
-  first push; the app has no pull secret.
+- **New GHCR packages start private.** A new image name must be flipped to
+  public once after its first push (as `observability/obsview` was); the
+  app has no pull secret.
 - **The custom domain is a local apply plus `make bind-domain`.** The managed
   certificate is a child of the shared environment in `rg-platform-dev`,
   where cd-terraform's identity cannot write, and the provider cannot finish
@@ -76,15 +75,10 @@ and workspace resolved by name, never by remote state.
   (values from Terraform outputs), and lands on the next deploy, not the
   next apply. It reads every output before touching the app, so a missing
   one stops the deploy instead of writing an empty value.
-- **The cutover order: apply, then deploy.** The obsview deploy needs the
-  `passcode` secret, port 8000 and the new outputs, which only the apply
-  creates, so a deploy run first stops at the output check and changes
-  nothing. Between the apply and the deploy the app is down: the revision
-  still runs Grafana's image, on obsview's port and probes.
-- **The `admin-password` secret and `random_password.admin` are Grafana's
-  leftovers.** Azure refuses to remove a secret that a revision's env still
-  references, and Grafana's env did until the first obsview deploy replaced
-  it. They go with `grafana/` in the next change.
+- **A container app secret can't be removed while a revision's env
+  references it.** Drop the env reference in `make deploy` and deploy it
+  before the Terraform change that removes the secret (as Grafana's
+  `admin-password` went).
 - **The scheduled checks run as the pipeline identity, not the app's.**
   Its subscription Reader is what reads Resource Graph and Cost Management.
   The app's own identity has `Log Analytics Reader` on the workspace and
@@ -96,15 +90,13 @@ and workspace resolved by name, never by remote state.
 - **Cost areas are fixed groups of resource groups**, so each keeps its
   colour whatever the month's ranking. A new resource group falls into
   "landing zone and other" until it is added to `AREAS` in
-  `app/src/obsview/costs.py` (and, while Grafana's dashboards exist, the
-  `case` in every panel that groups by area).
+  `app/src/obsview/costs.py`.
 - **The check scripts are tested in pre-commit, not a workflow.**
   `tests/run.sh` (`make test`) runs each `tests/*.test.sh` against stub `az`,
   `curl`, `openssl` and `sleep` written onto PATH, and the `script-tests` hook
   runs it, so `pre-commit / Pre-commit` fails a PR that breaks a check. A
   change to a check's jq or its retry, status or session rules needs a test
   there. The KQL itself is not exercised; check it against the workspace.
-  `grafana/entrypoint.sh` is untested (fixed image paths, then `exec`).
 - **`pre-commit run --all-files` skips untracked files.** `git add` new files
   before `make lint`, or terraform-docs, tflint and checkov never see them.
 
@@ -166,15 +158,11 @@ SHA with the tag as a comment, the same set gym-log uses:
   Reader, i.e. until github-repos gives this repo `deploy_resource_groups`.
 - `ci-python`: obsview's pytest, mypy and coverage from `app/` (not yet
   required).
-- `ci-container-build`: builds `grafana/` and `app/` (image `obsview`)
-  behind the `container-build` gate.
-- `cd-tag` → `cd-publish` (when `grafana/` or `app/` changed) →
-  `container-apps-deploy`, which deploys and smoke-tests `obsview`. The
-  Grafana image is still built until `grafana/` goes.
+- `ci-container-build`: builds `app/` (image `obsview`) behind the
+  `container-build` gate.
+- `cd-tag` → `cd-publish` (when `app/` changed) → `container-apps-deploy`,
+  which deploys and smoke-tests `obsview`.
 - `cd-terraform`: plans dev on merge; applies when run by hand.
-- `cd-grafana-cloud`: syncs `grafana/dashboards/` and the data source to the
-  Grafana Cloud stack on merge and on demand. Skips with a notice while
-  `GRAFANA_URL` is unset on `dev`. It is tested in `tests/sync-grafana-cloud.test.sh`.
 
 Required checks are set in github-repos. Only `pre-commit / Pre-commit` and
 `terraform / Terraform` are required until the rest report reliably.

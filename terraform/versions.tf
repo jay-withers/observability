@@ -11,7 +11,7 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.0"
     }
-    # Grafana's two passwords, and a transitive dependency of module.naming.
+    # obsview's passcode, and a transitive dependency of module.naming.
     random = {
       source  = "hashicorp/random"
       version = ">= 3.3.2"

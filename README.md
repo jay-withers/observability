@@ -40,7 +40,8 @@ steps:
    the top resource groups and services, and the session resources.
 3. **The cutover**: the container app runs obsview
    (`ghcr.io/jay-withers/observability/obsview`).
-4. Next: Grafana, its image and the Grafana Cloud sync are removed.
+4. **Grafana retired**: its dashboards, image build and the never-used
+   Grafana Cloud sync were removed.
 
 (Grafana Cloud was never set up, so the views came before the cutover: it
 could not leave Jobs and ops or Costs with nowhere to live.)
@@ -79,9 +80,7 @@ scripts' tests.
   request, and cached in memory for five minutes.
 - **What it reads** is the shared workspace, as its own managed identity
   (`Log Analytics Reader` on the workspace and nothing else).
-- **The views are code in `app/`** (see "Changing a view" below). The
-  Grafana dashboards under `grafana/` are no longer deployed, and go in the
-  next change.
+- **The views are code in `app/`** (see "Changing a view" below).
 - **Certificate expiry is checked here, nightly.** `schedule-expiry.yml` runs
   `scripts/check-expiry.sh` over `scripts/expiry-hosts.txt` (a TLS handshake
   per host, which doesn't wake a scale-to-zero app) and records one
@@ -170,59 +169,6 @@ obsview's links are all relative, so it needs no setting for its own URL.
 The default `*.azurecontainerapps.io` URL keeps working, and the smoke test
 uses it.
 
-## Grafana Cloud
-
-The same dashboards are moving to a free Grafana Cloud stack, which is always
-on, so there is no cold start. Log Analytics stays the data source and Azure
-Monitor keeps the alerting. Only where Grafana runs changes. While both exist,
-the container app above is the fallback. Retiring it (the app, image, custom
-domain and its Cloudflare records) is a separate change, once the stack is
-confirmed working.
-
-`cd-grafana-cloud.yml` runs `scripts/sync-grafana-cloud.sh` on every merge
-that touches `grafana/dashboards/`, and on demand. It writes the
-`azure-monitor` data source, the Platform folder and every dashboard through
-the stack's API, and deletes any dashboard in that folder that git no longer
-has. The UI does not lock dashboards: an edit made there is overwritten by
-the next run, so change the JSON here.
-
-Grafana Cloud runs outside Azure and cannot use a managed identity, so it
-reads the workspace as an **app registration with a client secret**. That is
-the one secret this setup adds, and it expires (see step 3).
-
-Set up once, in order:
-
-1. **Create the stack.** Sign up at grafana.com (free tier) and create a stack,
-   e.g. `https://jaywithers.grafana.net`. In the stack, go to Administration →
-   Users and access → Service accounts and add one with role **Admin**
-   (Editor cannot write data sources). Then create a token for it.
-2. **Create the app registration** that the stack reads Log Analytics as
-   (`az login` first, as someone who can create app registrations):
-
-   ```bash
-   app=$(az ad app create --display-name grafana-cloud-observability --query appId -o tsv)
-   az ad sp create --id "$app"
-   az role assignment create --assignee "$app" --role "Log Analytics Reader" \
-     --scope "$(az monitor log-analytics workspace show -g rg-platform-dev -n log-platform-dev --query id -o tsv)"
-   ```
-
-3. **Store the settings on the `dev` environment.** The secrets go through a
-   pipe, never onto the command line or the screen:
-
-   ```bash
-   R=jay-withers/observability
-   gh variable set GRAFANA_URL --env dev -R $R --body https://jaywithers.grafana.net
-   gh variable set GRAFANA_AZURE_CLIENT_ID --env dev -R $R --body "$app"
-   az ad app credential reset --id "$app" --display-name grafana-cloud --years 1 \
-     --query password -o tsv | gh secret set GRAFANA_AZURE_CLIENT_SECRET --env dev -R $R
-   gh secret set GRAFANA_TOKEN --env dev -R $R   # paste the token from step 1
-   ```
-
-   The client secret lasts a year. To renew it, rerun the `credential reset`
-   line, then run the workflow again.
-4. **Run `cd-grafana-cloud`** from the Actions tab, then open
-   *Dashboards → Platform* on the stack.
-
 ## Commands
 
 ```bash
@@ -254,19 +200,16 @@ make costs            # the Costs_CL rows schedule-costs would record
 
 Every workflow calls a shared one in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
-SHA, apart from the scheduled checks and `cd-grafana-cloud`, which run this
-repo's scripts.
+SHA, apart from the scheduled checks, which run this repo's scripts.
 
 - **ci-pre-commit**, **ci-python** (obsview's tests), **ci-container-build** (build plus Trivy) and
   **ci-terraform** (validate, then a real plan of dev on the PR) on pull
   requests. **ci-codeql** scans the workflows.
 - **cd-tag** → **cd-publish**: a release on every merge, publishing
   `ghcr.io/jay-withers/observability/obsview` and deploying it with the
-  shared smoke test and rollback, like any app. The Grafana image is still
-  built until `grafana/` goes.
+  shared smoke test and rollback, like any app.
 - **cd-terraform**: plans dev on merge and opens a `terraform-pending` issue;
   run it by hand to apply.
-- **cd-grafana-cloud**: syncs the dashboards to Grafana Cloud (above).
 - **schedule-expiry**, **schedule-heartbeats**, **schedule-session-resources**
   and **schedule-costs**: the nightly and daily checks described in
   [How it fits together](#how-it-fits-together). Each can also be run by hand.
@@ -279,8 +222,7 @@ A view is one KQL query for raw rows (`kql` and `window` in its module under
 `app/src/obsview/`) and a pure function that turns them into tiles and chart
 data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
 the charts are drawn by `static/app.js` from the JSON the template embeds.
-`make app-run` serves it on demo data. The Grafana dashboards under
-`grafana/dashboards/` are no longer deployed to the container app.
+`make app-run` serves it on demo data.
 
 ## Costs
 

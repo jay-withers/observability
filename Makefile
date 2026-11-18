@@ -120,8 +120,7 @@ deploy: ## Roll an image tag onto obsview, with its env (IMAGE_TAG required)
 			APP_PASSCODE=secretref:passcode
 
 # What cd-publish rolls back to when a deploy fails its smoke test: the obsview
-# tag live now, or nothing on the first deploy (the placeholder, or Grafana
-# before the cutover).
+# tag live now, or nothing on the first deploy (the placeholder).
 deployed-tag: ## Print the image tag live on obsview
 	@terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl >/dev/null
 	@az containerapp show \

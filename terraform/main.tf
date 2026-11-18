@@ -1,4 +1,4 @@
-# Grafana over the shared Log Analytics workspace. The Container Apps
+# obsview over the shared Log Analytics workspace. The Container Apps
 # environment and the workspace are **not** here: they belong to jay-withers/azure-container-apps and are
 # resolved by name in data.tf. Everything this project owns is in its own
 # resource group.

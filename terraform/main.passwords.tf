@@ -9,10 +9,3 @@ resource "random_password" "passcode" {
   length  = 24
   special = false
 }
-
-# Grafana's admin password, kept only until the container app's
-# `admin-password` secret can go (see main.container-apps.tf).
-resource "random_password" "admin" {
-  length  = 32
-  special = false
-}

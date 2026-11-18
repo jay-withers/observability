@@ -22,7 +22,7 @@ name: cd-publish
 # shared workflow once pushed the SHA tag and silently lost the version tag.
 # Check the registry after a release:
 #
-#   gh api user/packages/container/observability%2Fgrafana/versions?per_page=3 \
+#   gh api user/packages/container/observability%2Fobsview/versions?per_page=3 \
 #     --jq '.[] | "\(.updated_at) \(.metadata.container.tags|join(", "))"'
 on:
   workflow_call:
@@ -59,7 +59,7 @@ jobs:
     uses: jay-withers/workflows/.github/workflows/docker.yml@801fec3f77ffca7b2124bd0aa24be37b60bda7ac # v1.28.4
     with:
       images: |
-        [{"name": "grafana", "context": "grafana"}, {"name": "obsview", "context": "app"}]
+        [{"name": "obsview", "context": "app"}]
       ref: ${{ inputs.version }}
       push: true
       tags: ${{ inputs.version }}
