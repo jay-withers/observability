@@ -21,15 +21,6 @@ resource "azurerm_container_app" "this" {
     value = random_password.passcode.result
   }
 
-  # Grafana's admin password. Nothing reads it after the cutover, but a
-  # secret can't be removed while a revision's env still references it, and
-  # Grafana's env does until the first obsview deploy replaces it. Removed
-  # with grafana/ in the next change.
-  secret {
-    name  = "admin-password"
-    value = random_password.admin.result
-  }
-
   ingress {
     # Public, behind obsview's passcode.
     external_enabled = true

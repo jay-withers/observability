@@ -17,7 +17,7 @@ APPS = [
     ("gym-log", "gymlog"),
     ("finances", "finances"),
     ("career", "career"),
-    ("observability", "grafana"),
+    ("observability", "obsview"),
     ("repo-agent", "repoagent"),
     ("security-testing", "scanner"),
 ]

@@ -3,8 +3,8 @@ name: schedule-drift
 # Nightly drift check: plans dev through the shared terraform-deploy.yml with
 # `drift: true`, which records the result (ok, drifted or failed) as one
 # OpsEvents_CL row and never applies or opens a `terraform-pending` issue.
-# The platform's alert on that table reports a drifted root; Grafana's Jobs
-# and ops dashboard shows the latest result per root. A drifted plan is still
+# The platform's alert on that table reports a drifted root; obsview's Jobs
+# and ops view shows the latest result per root. A drifted plan is still
 # a green run. To fix drift, run cd-terraform by hand, or change the
 # configuration to match.
 #

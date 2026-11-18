@@ -30,7 +30,7 @@ jobs:
   # walks back to the actual previous tag instead.
   #
   # The path below must stay in step with ci-container-build.yml's filter:
-  # everything in the images is under grafana/ and app/, their build contexts.
+  # everything in the image is under app/, its build context.
   changes:
     needs: tag
     if: needs.tag.outputs.tag != ''
@@ -51,7 +51,7 @@ jobs:
           if [ -z "$prev_tag" ]; then
             echo "no previous release tag — publishing unconditionally"
             echo "apps=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$prev_tag"..HEAD -- grafana/ app/; then
+          elif git diff --quiet "$prev_tag"..HEAD -- app/; then
             echo "apps=false" >> "$GITHUB_OUTPUT"
           else
             echo "apps=true" >> "$GITHUB_OUTPUT"

@@ -24,13 +24,13 @@ variable "platform_resource_group_name" {
 }
 
 variable "platform_environment_name" {
-  description = "Name of the shared Container Apps environment Grafana runs on."
+  description = "Name of the shared Container Apps environment obsview runs on."
   type        = string
   default     = "cae-platform-dev"
 }
 
 variable "platform_workspace_name" {
-  description = "Name of the shared Log Analytics workspace Grafana reads, which holds Deployments_CL and OpsEvents_CL."
+  description = "Name of the shared Log Analytics workspace obsview reads, which holds Deployments_CL and OpsEvents_CL."
   type        = string
   default     = "log-platform-dev"
 }
@@ -38,7 +38,7 @@ variable "platform_workspace_name" {
 # --- the custom domain --------------------------------------------------------
 
 variable "custom_domain_name" {
-  description = "Hostname to bind to Grafana with a free Azure-managed certificate, e.g. `observability.jaywithers.uk`. Empty creates neither the certificate nor the binding, and Grafana's root URL stays the default `*.azurecontainerapps.io` one. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them."
+  description = "Hostname to bind to obsview with a free Azure-managed certificate, e.g. `observability.jaywithers.uk`. Empty creates neither the certificate nor the binding, and obsview is reached only on the default `*.azurecontainerapps.io` URL. The CNAME (to that default FQDN) and the `asuid.<label>` TXT record (holding `custom_domain_verification_id`) must already resolve before apply, because Azure validates both during issuance — `make dns` prints them."
   type        = string
   default     = ""
 

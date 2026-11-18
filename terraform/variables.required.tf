@@ -1,5 +1,5 @@
 variable "environment" {
-  description = "Deployment environment. Drives resource naming, and selects which shared platform environment Grafana runs on."
+  description = "Deployment environment. Drives resource naming, and selects which shared platform environment obsview runs on."
   type        = string
 
   validation {
