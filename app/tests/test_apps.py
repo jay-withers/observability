@@ -108,3 +108,72 @@ def test_summary_counts_the_range_and_says_when_a_query_failed() -> None:
     assert s.last is not None and s.last.outcome == "success"
     s = apps.summarise(GYM, deploys, since, None, None, None)
     assert (s.problems, s.spend, s.errors) == (None, None, None)
+
+
+# --- the platform ---------------------------------------------------------------
+
+
+def test_platform_events_are_those_no_app_owns() -> None:
+    rows = [
+        event("drift", "azure-landingzone/hub"),
+        event("drift", "cloudflare/terraform"),
+        event("drift", "gym-log/terraform"),
+        event("heartbeat", "caj-gymlog-dev-backup"),
+        event("heartbeat", "check: drift azure-container-apps/terraform"),
+        event("heartbeat", "check: drift finances/terraform"),
+        event("expiry", "health.jaywithers.uk"),
+        event("expiry", "example.jaywithers.uk"),
+        event("session", "firewall"),
+        event("cost-feed", "Costs_CL"),
+    ]
+    got = [e.name for e in apps.platform_events(ops.parse(rows))]
+    assert got == [
+        "azure-landingzone/hub",
+        "cloudflare/terraform",
+        "check: drift azure-container-apps/terraform",
+        "example.jaywithers.uk",
+        "firewall",
+        "Costs_CL",
+    ]
+
+
+def test_every_event_is_an_apps_or_the_platforms_never_both() -> None:
+    rows = [event("drift", f"{a.slug}/terraform") for a in apps.APPS]
+    rows += [event("heartbeat", f"caj-{a.prefix}-dev-job") for a in apps.APPS]
+    rows += [event("drift", "azure-landingzone/hub"), event("session", "vm")]
+    parsed = ops.parse(rows)
+    platform = apps.platform_events(parsed)
+    for e in parsed:
+        owners = [a for a in apps.APPS if apps.owns_event(a, e)]
+        assert len(owners) + (e in platform) == 1, e.name
+
+
+def test_platform_failed_runs_leave_out_app_workloads() -> None:
+    assert apps.platform_failed_runs(None) is None
+    runs = [
+        ops.FailedRun(job, "Error", 1, NOW, "")
+        for job in ("caj-gymlog-dev-backup", "ca-finances-dev", "caj-platform-dev-sweep")
+    ]
+    assert [r.job for r in apps.platform_failed_runs(runs) or []] == ["caj-platform-dev-sweep"]
+
+
+def test_platform_costs_are_the_groups_no_app_owns() -> None:
+    rows = costs.parse(
+        [
+            {
+                "UsageDate": NOW,
+                "ResourceGroup": rg,
+                "ServiceName": "s",
+                "Cost": 1.0,
+                "Currency": "USD",
+            }
+            for rg in ("rg-platform-dev", "RG-GYMLOG-DEV", "rg-aks-dev", "rg-hub-dev")
+        ]
+    )
+    assert [c.resource_group for c in apps.platform_costs(rows)] == [
+        "rg-platform-dev",
+        "rg-aks-dev",
+        "rg-hub-dev",
+    ]
+    assert GYM is not None
+    assert [c.resource_group for c in apps.costs_for(GYM, rows)] == ["rg-gymlog-dev"]

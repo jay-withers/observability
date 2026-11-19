@@ -1,4 +1,4 @@
-"""The Costs view, from `Costs_CL` and the session and cost-feed checks.
+"""The Costs panels, from `Costs_CL`.
 
 `schedule-costs` posts the last seven days per resource group and service
 every day, because Azure revises a day for about three. So a day has several
@@ -20,7 +20,6 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from .logs import Row
-from .ops import Event
 from .times import parse_time
 
 AREAS: dict[str, str] = {
@@ -146,13 +145,7 @@ class View:
     left_out: int
     groups: list[Bar]
     services: list[Bar]
-    sessions: list[Event]
-    feed: Event | None
     charts: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def running(self) -> int:
-        return sum(1 for e in self.sessions if e.status == "running")
 
     def scale(self, value: float) -> float:
         """A value as a percentage of the gauge's track."""
@@ -162,7 +155,6 @@ class View:
 
 def build(
     costs: list[Cost],
-    ops: dict[tuple[str, str], Event],
     days: int,
     now: datetime,
     budget: float,
@@ -215,10 +207,6 @@ def build(
         by_group[c.resource_group] += c.cost
         by_service[c.service] += c.cost
 
-    sessions = sorted(
-        (e for (k, _), e in ops.items() if k == "session"),
-        key=lambda e: (e.status != "running", e.name),
-    )
     return View(
         days=days,
         now=now,
@@ -241,8 +229,6 @@ def build(
         left_out=left_out,
         groups=_bars(by_group, area_of=area),
         services=_bars(by_service, limit=8),
-        sessions=sessions,
-        feed=ops.get(("cost-feed", "Costs_CL")),
         charts={
             "spend": _daily(costs, end, days),
             "treemap": _treemap(in_range),

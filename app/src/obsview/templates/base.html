@@ -17,10 +17,8 @@
   <div class="bar">
     <a class="brand" href="/">Observability <span class="env">{{ environment }}</span></a>
     <nav class="tabs" aria-label="Views">
-      <a href="/deployments?days={{ days }}" {% if page == "deployments" %}aria-current="page"{% endif %}>Deployments</a>
-      <a href="/ops?days={{ days }}" {% if page == "ops" %}aria-current="page"{% endif %}>Jobs &amp; ops</a>
-      <a href="/costs?days={{ days }}" {% if page == "costs" %}aria-current="page"{% endif %}>Costs</a>
       <a href="/apps?days={{ days }}" {% if page == "apps" %}aria-current="page"{% endif %}>Apps</a>
+      <a href="/platform?days={{ days }}" {% if page == "platform" %}aria-current="page"{% endif %}>Platform</a>
     </nav>
     {% if days %}
     <div class="range" role="group" aria-label="Time range">

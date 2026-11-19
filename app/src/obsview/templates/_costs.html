@@ -1,20 +1,22 @@
-{# The costs panels, shared by /costs and each app's page. #}
-{% macro money(v) %}{{ view.symbol }}{{ "{:,.2f}".format(v) }}{% endmacro %}
+{# The costs panels, shared by the platform and each app's page. `budget_view`,
+   when given, is the whole subscription's month against the budget. #}
+{# A macro sees the template's `view`, not one set by `with`: pass the symbol. #}
+{% macro money(v, sym=view.symbol) %}{{ sym }}{{ "{:,.2f}".format(v) }}{% endmacro %}
 {% macro status(s) %}<span class="badge st-{{ s }}">{{ s }}</span>{% endmacro %}
 {% set span = view.range_start.strftime("%-d %b") ~ (" – " ~ view.range_end.strftime("%-d %b") if view.range_end != view.range_start else "") %}
-{% if not per_app %}
+{% if budget_view %}{% with view = budget_view %}
 <section class="card budget" aria-label="{{ view.month_label }} against the budget">
   <div class="budget-head">
     <div>
-      <div class="label">{{ view.month_label }} to date</div>
-      <div class="hero-number">{{ money(view.month_to_date) }}</div>
+      <div class="label">{{ view.month_label }} to date, whole subscription</div>
+      <div class="hero-number">{{ money(view.month_to_date, view.symbol) }}</div>
     </div>
     <div class="budget-side">
-      {% if view.forecast is not none %}<div><span class="label">Forecast</span> <b class="{{ 'over' if view.forecast > view.budget else '' }}">{{ money(view.forecast) }}</b></div>{% endif %}
-      <div><span class="label">Budget</span> <b>{{ money(view.budget) }}</b> <span class="label">· {{ "%.0f" | format(view.budget_used) }}% used</span></div>
+      {% if view.forecast is not none %}<div><span class="label">Forecast</span> <b class="{{ 'over' if view.forecast > view.budget else '' }}">{{ money(view.forecast, view.symbol) }}</b></div>{% endif %}
+      <div><span class="label">Budget</span> <b>{{ money(view.budget, view.symbol) }}</b> <span class="label">· {{ "%.0f" | format(view.budget_used) }}% used</span></div>
     </div>
   </div>
-  <div class="bullet" role="img" aria-label="{{ money(view.month_to_date) }} spent, forecast {{ money(view.forecast or 0) }}, budget {{ money(view.budget) }}">
+  <div class="bullet" role="img" aria-label="{{ money(view.month_to_date, view.symbol) }} spent, forecast {{ money(view.forecast or 0, view.symbol) }}, budget {{ money(view.budget, view.symbol) }}">
     {% if view.forecast is not none %}<i class="forecast" style="width: {{ view.scale(view.forecast) }}%"></i>{% endif %}
     <i class="spent" style="width: {{ view.scale(view.month_to_date) }}%"></i>
     <b class="limit" style="left: {{ view.scale(view.budget) }}%"></b>
@@ -25,25 +27,14 @@
     <li><span class="swatch" style="background: var(--ink); width:2px"></span>Budget</li>
   </ul>
 </section>
-{% endif %}
+{% endwith %}{% endif %}
 
-<section class="tiles four" style="margin-top:10px" aria-label="The range{% if not per_app %}, session resources and the feed{% endif %}">
+<section class="tiles four" style="margin-top:10px" aria-label="The range">
   <div class="card tile">
     <div class="label">Spent, {{ span }}</div>
     <div class="value">{{ money(view.total) }}</div>
     {% if view.delta %}<div class="delta {{ view.tone }}">{{ view.delta }}</div>{% endif %}
   </div>
-  {% if not per_app %}
-  <div class="card tile">
-    <div class="label">Session resources running</div>
-    <div class="value {{ 'warn' if view.running else '' }}">{{ view.running }}</div>
-  </div>
-  <div class="card tile">
-    <div class="label">Cost feed</div>
-    <div class="value small">{% if view.feed %}{{ status(view.feed.status) }}{% else %}<span class="badge st-failed">no row</span>{% endif %}</div>
-    {% if view.feed %}<div class="delta">{{ ago(view.feed.when, view.now) }}</div>{% endif %}
-  </div>
-  {% endif %}
 </section>
 
 <div class="card" style="margin-top:10px">
@@ -85,23 +76,3 @@
     </ul>
   </div>
 </div>
-
-{% if not per_app %}
-<h2 class="section-title">Session resources</h2>
-<div class="card">
-  {% if view.sessions %}
-  <ol class="recent">
-    {% for e in view.sessions %}
-    <li>
-      <div class="what">{{ e.name }}</div>
-      <div class="when">{{ ago(e.when, view.now) }}</div>
-      <div class="how">{{ e.detail }}</div>
-      <div>{{ status(e.status) }}</div>
-    </li>
-    {% endfor %}
-  </ol>
-  {% else %}
-  <p class="empty">No session check in the last 48 hours.</p>
-  {% endif %}
-</div>
-{% endif %}

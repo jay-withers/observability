@@ -6,17 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dashboards for the jay-withers Container Apps estate: a scale-to-zero
 container app on the shared environment, reading the shared Log Analytics
-workspace. It ships the Deployments view over `Deployments_CL` (phase 1 of the
-observability plan), Jobs and ops over `OpsEvents_CL` (phase 2) and Costs over
-`Costs_CL`. It also runs the checks that feed them: `schedule-expiry`,
-`schedule-heartbeats`, `schedule-session-resources` and `schedule-costs`.
-`README.md` covers the why and the first-time setup; this file covers the
-traps.
+workspace. It shows deployments (`Deployments_CL`), jobs and ops
+(`OpsEvents_CL`), costs (`Costs_CL`) and app errors (console logs), as a
+page per app and a Platform page for the shared infrastructure. It also runs
+the checks that feed them: `schedule-expiry`, `schedule-heartbeats`,
+`schedule-session-resources` and `schedule-costs`. `README.md` covers the
+why and the first-time setup; this file covers the traps.
 
 **The container app runs obsview** (`app/`, README "obsview"), a FastAPI
-app in gym-log's shape that replaced Grafana, with all three views
-(Deployments, Jobs and ops, Costs). Grafana, its image and the Grafana
-Cloud sync were removed after the cutover; a new view goes in obsview.
+app in gym-log's shape that replaced Grafana. Grafana, its image and the
+Grafana Cloud sync were removed after the cutover; a new view goes in obsview.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
 shaped like gym-log: its own resource group and identity, the environment
@@ -137,16 +136,27 @@ and workspace resolved by name, never by remote state.
   last day with data. The "vs prior" delta is shown only when the data
   reaches back to the start of the prior range, so retention can't pass for
   a rise from nothing. The ranges are `routes.RANGES` (1 to 90 days); the
-  event tables' retention in azure-container-apps bounds how far back they
-  have data.
-- **Per-app pages (`/apps`, `/apps/<slug>`) are the estate views sliced
-  by `apps.APPS`**: the same builders over filtered rows, the same queries
-  and windows (so they share the cache), and the same templates
-  (`_deployments.html`, `_ops.html`, `_costs.html`, with `per_app` hiding
-  estate-only cards and `data-group` keying each chart's data). A new app
-  is a row in `apps.APPS`; its `prefix` is the repo's `project_name`, which
-  names its resource group and Container Apps workloads. Only the deploy
-  query is required; the rest render a "couldn't read" card on failure.
+  event tables keep 90 days (azure-container-apps), so the delta never shows
+  on 60d or 90d, and console logs keep the workspace's 30, so errors reach
+  back 30 days at most.
+- **The pages are Apps and Platform**, the estate's rows sliced by
+  `apps.APPS`. `/apps` has a card per app and every app's deploys together;
+  `/apps/<slug>` is one app; `/platform` is the complement, whatever no app
+  owns (`apps.platform_*`). All use the same builders over filtered rows, the
+  same queries and windows (`routes._app_queries`, so they share the cache),
+  and the same templates (`_deployments.html`, `_ops.html`, `_costs.html`,
+  `_errors.html`, with `per_app` hiding the ops count tiles and the "By app"
+  links, and `data-group` keying each chart's data). The budget card is the
+  whole subscription's month, so `/platform` builds it from every group's
+  rows (`budget_view`), not the platform's. A new app is a row in
+  `apps.APPS`; its `prefix` is the repo's `project_name`, which names its
+  resource group and Container Apps workloads. Until then its rows show on
+  Platform. Only the deploy query is required on the app pages; on Platform
+  none is, and each failure renders a "couldn't read" card. The old
+  `/deployments`, `/ops` and `/costs` redirect (303, not 301: browsers keep
+  a permanent redirect for good). The session and cost-feed checks write a
+  row every run, so Platform counts "no row in 48 hours" as a problem
+  (`routes._ALWAYS_REPORT`) rather than leaving their section out.
 - **App errors are console-log lines** (`errors.py`): `ERROR` or
   `CRITICAL`, or a 5xx access line, grouped in Python by first line with
   UUIDs, hex ids, numbers and quoted values masked. The query caps each

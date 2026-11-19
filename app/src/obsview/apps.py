@@ -13,8 +13,8 @@ Each table names an app its own way, so the tie is explicit here, as
   app and `caj-<prefix>-dev-<job>` for its jobs.
 
 `prefix` is the repo's Terraform `project_name`. Rows that belong to no app
-(the landing zone, Cloudflare, sessions, the cost feed) stay on the estate
-views only.
+(the landing zone, the shared environment, Cloudflare, AKS, sessions, the
+cost feed) are the platform's: its page is the complement of every app's.
 """
 
 from __future__ import annotations
@@ -92,6 +92,27 @@ def failed_runs_for(app: App, runs: list[FailedRun] | None) -> list[FailedRun] |
 
 def costs_for(app: App, costs: Iterable[Cost]) -> list[Cost]:
     return [c for c in costs if c.resource_group == app.resource_group]
+
+
+# --- the platform: whatever no app owns ----------------------------------------
+
+
+def app_workload(name: str) -> bool:
+    return any(a.owns_workload(name) for a in APPS)
+
+
+def platform_events(events: Iterable[Event]) -> list[Event]:
+    return [e for e in events if not any(owns_event(a, e) for a in APPS)]
+
+
+def platform_failed_runs(runs: list[FailedRun] | None) -> list[FailedRun] | None:
+    return None if runs is None else [r for r in runs if not app_workload(r.job)]
+
+
+def platform_costs(costs: Iterable[Cost]) -> list[Cost]:
+    # `costs.parse` lower-cases the group, as the names here are.
+    groups = {a.resource_group for a in APPS}
+    return [c for c in costs if c.resource_group not in groups]
 
 
 @dataclass

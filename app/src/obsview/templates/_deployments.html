@@ -1,4 +1,4 @@
-{# The deployments panels, shared by /deployments and each app's page. #}
+{# The deployments panels, shared by the apps index and each app's page. #}
 {% macro badge(outcome) %}<span class="badge o-{{ outcome }}">{{ outcome | replace("_", " ") }}</span>{% endmacro %}
 <section class="tiles" aria-label="Headline figures">
   {% for k in view.kpis %}
