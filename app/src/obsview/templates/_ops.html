@@ -1,9 +1,11 @@
-{# The ops panels, shared by /ops and each app's page. #}
+{# The ops panels, shared by the platform and each app's page. #}
 {% macro status(s) %}<span class="badge st-{{ s }}">{{ s }}</span>{% endmacro %}
-{% if view.problems %}
+{% set silent = silent | default([]) %}
+{% set n = view.problems | length + silent | length %}
+{% if n %}
 <section class="hero bad" aria-label="Problems now">
   <div class="hero-head"><span class="hero-icon" aria-hidden="true">!</span>
-    <div><div class="hero-title">{{ view.problems | length }} problem{{ "s" if view.problems | length != 1 }} now</div>
+    <div><div class="hero-title">{{ n }} problem{{ "s" if n != 1 }} now</div>
     <div class="hero-sub">Latest row per check, last 48 hours</div></div></div>
   <ul class="problems">
     {% for e in view.problems %}
@@ -11,6 +13,13 @@
       <div class="what">{{ e.name }} <small>{{ e.kind }}</small></div>
       {{ status(e.status) }}
       <div class="how">{{ e.detail }}{% if e.run_url %} · <a href="{{ e.run_url }}" rel="noopener" target="_blank">run</a>{% endif %}</div>
+    </li>
+    {% endfor %}
+    {% for title in silent %}
+    <li>
+      <div class="what">{{ title }} <small>no row</small></div>
+      {{ status("failed") }}
+      <div class="how">No row in the last 48 hours: the check itself may have stopped.</div>
     </li>
     {% endfor %}
   </ul>

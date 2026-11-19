@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from obsview import costs, ops
+from obsview import costs
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 
@@ -20,11 +20,8 @@ def row(day: date, rg: str, service: str, cost: float, currency: str = "USD") ->
     }
 
 
-def build(
-    rows: list[dict[str, Any]], days: int = 30, events: list[Any] | None = None
-) -> costs.View:
-    current = ops.latest(ops.parse(events or []), NOW)
-    return costs.build(costs.parse(rows), current, days, NOW, budget=150.0)
+def build(rows: list[dict[str, Any]], days: int = 30) -> costs.View:
+    return costs.build(costs.parse(rows), days, NOW, budget=150.0)
 
 
 def test_month_to_date_counts_this_month_only() -> None:
@@ -108,30 +105,6 @@ def test_currency_symbol() -> None:
     assert build([row(date(2026, 11, 10), "rg", "s", 1.0, "CHF")]).symbol == "CHF "
 
 
-def test_sessions_and_feed_come_from_ops_events() -> None:
-    events = [
-        {"TimeGenerated": NOW, "Kind": "session", "Name": "vm", "Status": "ok", "Detail": ""},
-        {
-            "TimeGenerated": NOW,
-            "Kind": "session",
-            "Name": "bastion",
-            "Status": "running",
-            "Detail": "",
-        },
-        {
-            "TimeGenerated": NOW,
-            "Kind": "cost-feed",
-            "Name": "Costs_CL",
-            "Status": "ok",
-            "Detail": "",
-        },
-    ]
-    view = build([], events=events)
-    assert [e.name for e in view.sessions] == ["bastion", "vm"]
-    assert view.running == 1
-    assert view.feed is not None and view.feed.status == "ok"
-
-
 def test_gauge_scale_fits_the_largest_of_budget_forecast_and_spend() -> None:
     rows = [row(date(2026, 11, d), "rg-platform-dev", "x", 10.0) for d in range(1, 11)]
     view = build(rows)  # $100 so far, $300 forecast, $150 budget
@@ -170,7 +143,6 @@ def test_early_in_the_month_data_through_shows_last_month() -> None:
     # page still says how fresh the data is.
     view = costs.build(
         costs.parse([row(date(2026, 10, 31), "rg-platform-dev", "a", 1.0)]),
-        {},
         30,
         datetime(2026, 11, 1, 9, 0, tzinfo=UTC),
         budget=150.0,
@@ -212,7 +184,6 @@ def test_range_ends_on_the_last_day_with_data() -> None:
 def test_an_explicit_end_is_kept_for_a_quiet_app() -> None:
     view = costs.build(
         costs.parse([row(date(2026, 11, 10), "rg-gymlog-dev", "Storage", 1.0)]),
-        {},
         3,
         NOW,
         budget=150.0,
@@ -251,4 +222,4 @@ def test_spend_matches_builds_total() -> None:
         ]
     )
     end = date(2026, 11, 15)
-    assert costs.spend(rows, end, 3) == costs.build(rows, {}, 3, NOW, 150.0, end=end).total == 2.0
+    assert costs.spend(rows, end, 3) == costs.build(rows, 3, NOW, 150.0, end=end).total == 2.0

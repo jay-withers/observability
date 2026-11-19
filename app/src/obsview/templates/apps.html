@@ -2,7 +2,7 @@
 {% block title %}Apps · Observability{% endblock %}
 {% block body %}
 <h1>Apps</h1>
-<p class="lede">Each app's deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}. Open one for its own page.</p>
+<p class="lede">Each app's deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}. Open one for its own page; the shared infrastructure is under <a href="/platform?days={{ days }}">Platform</a>.</p>
 
 <div class="apps">
   {% for s in summaries %}
@@ -21,4 +21,17 @@
   </a>
   {% endfor %}
 </div>
+
+<h2 class="section-title" id="deployments">All apps' deploys</h2>
+<p class="sub">Every deploy to {{ environment }}, from <code>Deployments_CL</code>.</p>
+{% with view = dview, group = "deploy", per_app = false %}
+{% include "_deployments.html" %}
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+{% if dview.total %}
+<script type="application/json" id="chart-data">{{ payload | tojson }}</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+{% endif %}
 {% endblock %}

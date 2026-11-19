@@ -67,7 +67,7 @@ def test_healthz_is_open_and_reports_the_tag(
 
 
 def test_pages_redirect_to_login_without_a_session(client: TestClient) -> None:
-    response = client.get("/deployments", follow_redirects=False)
+    response = client.get("/apps", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
 
@@ -78,12 +78,12 @@ def test_wrong_passcode_is_refused(client: TestClient) -> None:
     assert "obsview_session" not in response.cookies
 
 
-def test_deployments_page_renders_demo_data_with_chart_payload(
+def test_apps_index_renders_all_apps_deploys_with_chart_payload(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
-    response = client.get("/deployments?days=30")
+    response = client.get("/apps?days=30")
     assert response.status_code == 200
     assert "Demo data" in response.text
     match = re.search(
@@ -92,14 +92,40 @@ def test_deployments_page_renders_demo_data_with_chart_payload(
     assert match
     payload = json.loads(match.group(1))
     assert payload["days"] == 30
-    assert set(payload["charts"]) >= {"dates", "outcomes", "timeline", "calendar", "lead"}
-    assert len(payload["charts"]["dates"]) == 30
+    charts = payload["groups"]["deploy"]
+    assert set(charts) >= {"dates", "outcomes", "timeline", "calendar", "lead"}
+    assert len(charts["dates"]) == 30
+    assert 'data-group="deploy" data-chart="outcomes"' in response.text
 
 
-def test_root_redirects_to_deployments(client: TestClient) -> None:
+def test_root_redirects_to_apps(client: TestClient) -> None:
     sign_in(client)
     response = client.get("/", follow_redirects=False)
-    assert response.headers["location"] == "/deployments"
+    assert response.headers["location"] == "/apps"
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("/deployments?days=7", "/apps?days=7"),
+        ("/ops?days=90", "/platform?days=90"),
+        ("/costs", "/platform?days=30"),
+        ("/costs?days=junk", "/platform?days=30"),
+    ],
+)
+def test_the_old_views_redirect(client: TestClient, old: str, new: str) -> None:
+    sign_in(client)
+    response = client.get(old, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == new
+
+
+def test_the_nav_is_apps_and_platform(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    nav = re.search(r'<nav class="tabs".*?</nav>', client.get("/apps").text, re.S)
+    assert nav
+    assert re.findall(r'href="(/[a-z]+)\?', nav.group(0)) == ["/apps", "/platform"]
 
 
 def test_unknown_range_falls_back_to_the_default(
@@ -108,9 +134,9 @@ def test_unknown_range_falls_back_to_the_default(
     recording = Recording()
     use(monkeypatch, recording)
     sign_in(client)
-    response = client.get("/deployments?days=12345")
+    response = client.get("/apps?days=12345")
     assert response.status_code == 200
-    assert recording.spans == [deployments.window(routes.DEFAULT_RANGE)]
+    assert deployments.window(routes.DEFAULT_RANGE) in recording.spans
     assert "No deploys in the last 30 days" in response.text
     # No charts to draw, so no chart script either.
     assert "echarts" not in response.text
@@ -121,7 +147,7 @@ def test_query_failure_is_a_page_not_a_500(
 ) -> None:
     use(monkeypatch, Failing())
     sign_in(client)
-    response = client.get("/deployments")
+    response = client.get("/apps")
     assert response.status_code == 502
     assert "Couldn&#39;t load this view" in response.text or "Couldn't load" in response.text
     assert "HttpResponseError" in response.text
@@ -148,7 +174,7 @@ def test_no_passcode_means_no_session_even_with_a_forged_cookie(
     key = hashlib.sha256(b"").digest()
     forged = f"{issued}.{hmac.new(key, issued.encode(), hashlib.sha256).hexdigest()}"
     client.cookies.set("obsview_session", forged)
-    response = client.get("/deployments", follow_redirects=False)
+    response = client.get("/apps", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
 
@@ -167,40 +193,128 @@ def test_a_malformed_range_falls_back_rather_than_422(
     use(monkeypatch, recording)
     sign_in(client)
     for bad in ("30d", ""):
-        assert client.get(f"/deployments?days={bad}").status_code == 200
-    assert recording.spans == [deployments.window(routes.DEFAULT_RANGE)] * 2
+        assert client.get(f"/apps?days={bad}").status_code == 200
+        assert deployments.window(routes.DEFAULT_RANGE) in recording.spans
+        recording.spans.clear()
 
 
-@pytest.mark.parametrize("path", ["/ops", "/costs"])
-def test_ops_and_costs_pages_render_demo_data(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+def test_platform_renders_demo_data(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    response = client.get("/platform?days=30")
+    assert response.status_code == 200
+    payload = json.loads(
+        re.search(r'id="chart-data">(.*?)</script>', response.text, re.S).group(1)  # type: ignore[union-attr]
+    )
+    assert set(payload["groups"]) == {"ops", "costs"}
+    assert 'aria-current="page"' in response.text
+    for section in ('id="ops"', 'id="costs"', 'id="errors"'):
+        assert section in response.text
+
+
+def test_platform_shows_only_what_no_app_owns(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
-    response = client.get(f"{path}?days=30")
+    text = client.get("/platform").text
+    assert "azure-landingzone/hub" in text
+    assert "Session resources" in text
+    assert "rg-platform-dev" in text
+    assert "gym-log/terraform" not in text
+    assert "caj-gymlog-dev-backup" not in text
+    assert "rg-finances-dev" not in text
+    # The budget is the subscription's: its card is here, not on app pages.
+    assert "whole subscription" in text
+    assert "whole subscription" not in client.get("/apps/gym-log").text
+
+
+def test_platform_budget_counts_every_resource_group(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+    rows = [
+        {"UsageDate": now, "ResourceGroup": rg, "ServiceName": "s", "Cost": cost, "Currency": "USD"}
+        for rg, cost in (("rg-platform-dev", 3.0), ("rg-gymlog-dev", 4.0))
+    ]
+
+    class Costs:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            return rows if kql.startswith("Costs_CL") else []
+
+    use(monkeypatch, Costs())
+    sign_in(client)
+    text = client.get("/platform?days=1").text
+    assert '<div class="hero-number">$7.00</div>' in text
+    assert '<div class="value">$3.00</div>' in text
+
+
+def test_platform_renders_with_no_rows(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    response = client.get("/platform")
     assert response.status_code == 200
-    assert 'id="chart-data"' in response.text
-    assert 'aria-current="page"' in response.text
+    assert "echarts" not in response.text or 'id="chart-data"' in response.text
 
 
-@pytest.mark.parametrize("path", ["/ops", "/costs"])
-def test_ops_and_costs_pages_render_with_no_rows(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+def test_platform_says_when_an_always_reporting_check_goes_quiet(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, Recording())
     sign_in(client)
-    assert client.get(path).status_code == 200
+    text = client.get("/platform").text
+    assert "2 problems now" in text
+    assert "Session resources <small>no row</small>" in text
+    assert "Cost feed <small>no row</small>" in text
+    # An app page has no such checks, so it says nothing about them.
+    assert "no row" not in client.get("/apps/gym-log").text
 
 
-@pytest.mark.parametrize("path", ["/ops", "/costs"])
-def test_ops_and_costs_query_failure_is_a_page(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+def test_platform_with_both_checks_reporting_is_all_clear(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+    rows = [
+        {"TimeGenerated": now, "Kind": k, "Name": n, "Status": "ok", "Detail": ""}
+        for k, n in (("session", "vm"), ("cost-feed", "Costs_CL"))
+    ]
+
+    class Ops:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            return rows if "OpsEvents_CL" in kql.splitlines()[0] else []
+
+    use(monkeypatch, Ops())
+    sign_in(client)
+    text = client.get("/platform").text
+    assert "All clear" in text
+    assert "no row" not in text
+
+
+def test_warm_up_fills_the_default_pages_queries(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, timedelta]] = []
+
+    class Spy:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            seen.append((kql, timespan))
+            return []
+
+    use(monkeypatch, Spy())
+    routes.warm()
+    assert routes.ready_query() in seen
+    assert len(seen) == len(routes._index_queries(routes.DEFAULT_RANGE, datetime.now(UTC)))
+
+
+def test_platform_renders_around_every_query_failing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, Failing())
     sign_in(client)
-    response = client.get(path)
-    assert response.status_code == 502
-    assert "HttpResponseError" in response.text
+    response = client.get("/platform")
+    assert response.status_code == 200
+    assert "Couldn't read the checks" in response.text
+    assert "Couldn't read the costs" in response.text
+    assert "Couldn't read the console logs" in response.text
+    assert "echarts" not in response.text
 
 
 class FailedRunsBroken:
@@ -212,12 +326,12 @@ class FailedRunsBroken:
         return DemoLogs(now=datetime.now(UTC)).query(kql, timespan)
 
 
-def test_ops_page_survives_the_failed_runs_query_failing(
+def test_platform_survives_the_failed_runs_query_failing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, FailedRunsBroken())
     sign_in(client)
-    response = client.get("/ops")
+    response = client.get("/platform")
     assert response.status_code == 200
     assert "read the failed runs" in response.text
     assert "Jobs and checks" in response.text
@@ -286,7 +400,7 @@ def test_readyz_passes_on_explicit_demo(monkeypatch: pytest.MonkeyPatch) -> None
     assert response.status_code == 200
 
 
-# --- per-app pages ---------------------------------------------------------------
+# --- apps and the platform ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize("path", ["/apps", "/apps/gym-log"])
@@ -394,8 +508,8 @@ def test_every_range_is_offered_and_honoured(
     recording = Recording()
     use(monkeypatch, recording)
     sign_in(client)
-    response = client.get(f"/deployments?days={days}")
-    assert recording.spans == [deployments.window(days)]
+    response = client.get(f"/apps?days={days}")
+    assert deployments.window(days) in recording.spans
     for r in routes.RANGES:
         assert f'href="?days={r}"' in response.text
 
@@ -405,7 +519,9 @@ def test_deployment_app_cards_link_to_the_app_page(
 ) -> None:
     use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
-    assert 'href="/apps/gym-log?days=30"' in client.get("/deployments").text
+    text = client.get("/apps").text
+    deploys = text[text.index('id="deployments"') :]
+    assert 'href="/apps/gym-log?days=30"' in deploys
 
 
 class FailedRunsOnlyBroken:

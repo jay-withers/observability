@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Platform · Observability{% endblock %}
+{% block body %}
+<h1>Platform</h1>
+<p class="lede">The shared infrastructure every app runs on: the landing zone, the Container Apps environment, DNS, session resources and the cost feed. Everything here is what no app owns. No deploys are recorded for it; its Terraform changes show as drift.</p>
+<nav class="jump" aria-label="Sections">
+  <a href="#ops">Jobs &amp; ops</a><a href="#costs">Costs</a><a href="#errors">Errors</a>
+</nav>
+
+<h2 class="section-title" id="ops">Jobs &amp; ops</h2>
+{% if oview is none %}
+<div class="card"><p class="empty">Couldn't read the checks just now; the rest of the page is current.</p></div>
+{% else %}
+{% with view = oview, group = "ops", per_app = false %}
+{% include "_ops.html" %}
+{% endwith %}
+{% endif %}
+
+<h2 class="section-title" id="costs">Costs</h2>
+{% if cview is none %}
+<div class="card"><p class="empty">Couldn't read the costs just now; the rest of the page is current.</p></div>
+{% else %}
+<p class="sub">Resource groups no app owns, actual cost before any credit, from <code>Costs_CL</code>{% if cview.data_through %}, through {{ cview.data_through.strftime("%-d %b") }}{% endif %}.{% if cview.left_out %} {{ cview.left_out }} row{{ "s" if cview.left_out != 1 }} in another currency left out.{% endif %}</p>
+{% with view = cview, group = "costs", per_app = false %}
+{% include "_costs.html" %}
+{% endwith %}
+{% endif %}
+
+{% include "_errors.html" %}
+{% endblock %}
+{% block scripts %}
+{% if payload.groups %}
+<script type="application/json" id="chart-data">{{ payload | tojson }}</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+{% endif %}
+{% endblock %}
