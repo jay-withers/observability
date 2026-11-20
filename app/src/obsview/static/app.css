@@ -241,8 +241,6 @@ ul.gauges, ul.hbars { list-style: none; margin: 8px 0 0; padding: 0; display: gr
 .chart.tall { height: 340px; }
 
 /* --- per-app pages ---------------------------------------------------------- */
-a.app-link { display: block; text-decoration: none; color: inherit; }
-a.app-link:hover, a.app-link:focus-visible { box-shadow: 0 0 0 2px var(--ink-2); }
 .app .name a { color: inherit; }
 .crumb { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
 .crumb a { color: var(--ink-2); }
@@ -269,3 +267,21 @@ nav.jump a { flex: none; }
 }
 nav.jump a { font-size: 13px; padding: 4px 10px; border-radius: 999px; color: var(--ink-2); text-decoration: none; box-shadow: 0 0 0 1px var(--ring); }
 code.sample { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* --- page tiles: home's one per page, /apps' one per app ------------------- */
+.nav-tiles { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .nav-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Two apps a row once a tile's meta line fits; one on a narrow phone. */
+@media (min-width: 480px) { .nav-tiles.apps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 720px) { .nav-tiles.apps-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .nav-tiles.apps-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+a.nav-tile { display: flex; flex-direction: column; gap: 6px; min-height: 128px; text-decoration: none; color: inherit; }
+a.nav-tile:hover, a.nav-tile:focus-visible { box-shadow: 0 0 0 2px var(--ink-2); }
+.nav-tile .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.nav-tile .title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.nav-tile .go { color: var(--muted); font-size: 22px; line-height: 1; }
+.nav-tile .value { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.nav-tile .value.small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.nav-tile .label { font-size: 13px; color: var(--ink-2); margin-top: -4px; }
+.nav-tile .meta { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.nav-tile .foot { margin-top: auto; }

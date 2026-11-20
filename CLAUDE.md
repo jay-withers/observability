@@ -148,7 +148,11 @@ and workspace resolved by name, never by remote state.
   on 60d or 90d, and console logs keep the workspace's 30, so errors reach
   back 30 days at most.
 - **The pages are Apps, Platform and Overall**, the estate's rows sliced by
-  `apps.APPS`, plus the whole subscription's costs. `/apps` has a card per app and every app's deploys together;
+  `apps.APPS`, plus the whole subscription's costs. `/` is a tile per page
+  with its headline figures (`routes.home`): it reads the apps index's
+  queries (`_index_queries`, so the warm-up covers both), every one
+  optional, and counts the platform's problems as `/platform` does, quiet
+  always-reporting checks included (`_silent`). `/apps` has a tile per app and every app's deploys together;
   `/apps/<slug>` is one app; `/platform` is the complement, whatever no app
   owns (`apps.platform_*`). All use the same builders over filtered rows, the
   same queries and windows (`routes._app_queries`, so they share the cache),

@@ -15,7 +15,7 @@
 {% if page != "login" %}
 <header class="top">
   <div class="bar">
-    <a class="brand" href="/">Observability <span class="env">{{ environment }}</span></a>
+    <a class="brand" href="/{% if days %}?days={{ days }}{% endif %}">Observability <span class="env">{{ environment }}</span></a>
     <nav class="tabs" aria-label="Views">
       <a href="/apps?days={{ days }}" {% if page == "apps" %}aria-current="page"{% endif %}>Apps</a>
       <a href="/platform?days={{ days }}" {% if page == "platform" %}aria-current="page"{% endif %}>Platform</a>
