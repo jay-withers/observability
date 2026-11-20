@@ -23,6 +23,27 @@
     <div class="meta foot">{{ app_count }} apps · {{ error_lines(apps_now) }}</div>
   </a>
 
+  <a class="card nav-tile" href="/slo?days={{ days }}">
+    <div class="head"><span class="title">SLOs</span><span class="go" aria-hidden="true">›</span></div>
+    {% set t = slo_tally %}
+    {% set scored = app_count - t["no-data"] - t["unavailable"] %}
+    <div>
+      {% if t["exhausted"] %}<span class="badge st-failed">{{ t["exhausted"] }} spent</span>
+      {% elif t["at-risk"] %}<span class="badge st-overdue">{{ t["at-risk"] }} at risk</span>
+      {% elif t["unavailable"] and t["unavailable"] < app_count %}<span class="badge st-removed">partly unavailable</span>
+      {% elif scored %}<span class="badge st-ok">within budget</span>{% endif %}
+    </div>
+    {% if t["unavailable"] == app_count %}
+    <div class="value small">SLOs unavailable</div>
+    {% elif not scored %}
+    <div class="value small">No SLO events in {{ slo_window }} days</div>
+    {% else %}
+    <div class="value">{{ t["ok"] }}<small class="of"> of {{ scored }}</small></div>
+    <div class="label">app{{ "s" if scored != 1 }} within error budget</div>
+    {% endif %}
+    <div class="meta foot">{{ slo_window }}-day availability, latency, job runs and deploys</div>
+  </a>
+
   <a class="card nav-tile" href="/platform?days={{ days }}">
     <div class="head"><span class="title">Platform</span><span class="go" aria-hidden="true">›</span></div>
     <div>{{ headline(platform_now, counted=true) }}</div>

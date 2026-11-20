@@ -270,7 +270,10 @@ code.sample { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
 
 /* --- page tiles: home's one per page, /apps' one per app ------------------- */
 .nav-tiles { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 720px) { .nav-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Home's four: two by two, then one row. */
+@media (min-width: 720px) { .nav-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .nav-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.nav-tile .value small.of { font-size: 15px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
 /* Two apps a row once a tile's meta line fits; one on a narrow phone. */
 @media (min-width: 480px) { .nav-tiles.apps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 720px) { .nav-tiles.apps-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -285,3 +288,23 @@ a.nav-tile:hover, a.nav-tile:focus-visible { box-shadow: 0 0 0 2px var(--ink-2);
 .nav-tile .label { font-size: 13px; color: var(--ink-2); margin-top: -4px; }
 .nav-tile .meta { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .nav-tile .foot { margin-top: auto; }
+
+/* --- SLOs: /slo's tile per app and /slo/<app> ------------------------------ */
+ul.slis { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; margin-top: auto; }
+ul.slis li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; font-size: 13px; }
+ul.slis .name { color: var(--ink-2); }
+ul.slis .fig { font-variant-numeric: tabular-nums; text-align: right; }
+ul.slis .fig small { color: var(--muted); }
+ul.slis .meter { grid-column: 1 / -1; }
+.meter { display: block; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; margin-top: 6px; }
+.meter i { display: block; height: 100%; border-radius: 3px; }
+.slo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.tiles.slo-figures { margin: 6px 0 4px; }
+@media (min-width: 900px) { .tiles.slo-figures { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.slo .tile .value { font-variant-numeric: tabular-nums; }
+.chart-title { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 14px 0 4px; }
+table.objectives { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.objectives th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); padding: 0 8px 6px 0; }
+table.objectives td { padding: 8px 8px 8px 0; border-top: 1px solid var(--grid); vertical-align: top; }
+table.objectives td:last-child, table.objectives th:last-child { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.objectives small { color: var(--muted); }

@@ -225,9 +225,10 @@ data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
 the charts are drawn by `static/app.js` from the JSON the template embeds.
 `make app-run` serves it on demo data.
 
-The home page, `/`, is a tile for each of the pages, **Apps**, **Platform** and
-**Overall**, with its headline: the apps' deploys, problems and errors, the
-platform's problems now and errors, and the month's spend against the budget.
+The home page, `/`, is a tile for each of the pages, **Apps**, **SLOs**,
+**Platform** and **Overall**, with its headline: the apps' deploys, problems
+and errors, how many apps are within their error budgets, the platform's
+problems now and errors, and the month's spend against the budget.
 `/apps` has a tile per app and,
 under them, every app's deploys together (deploys are all apps': only
 container-apps-deploy records them). Each app has its own page,
@@ -244,6 +245,27 @@ pinned while it scrolls. Which rows belong to
 an app is set in `app/src/obsview/apps.py`: add a row there when a new app
 joins the estate, or its rows show up under Platform. The old
 `/deployments`, `/ops` and `/costs` URLs redirect (`/costs` to Overall).
+
+## SLOs
+
+`/slo` is a tile per app with its service level objectives over a rolling
+28 days: its worst status, the error budget it has least of, and each SLI
+against its target. Open one for `/slo/<app>`: each SLI's value, budget left,
+bad events against those allowed, burn rate over the last day and week, and
+the budget's burn-down by day.
+
+| SLI | Good events | Target | Source |
+| --- | --- | --- | --- |
+| Availability | Requests answered without a 5xx | 99.5% | `ContainerAppHTTPLogs` |
+| Latency | Requests answered within 1,000 ms | 95% | `ContainerAppHTTPLogs` |
+| Job runs | Job executions that completed | 95% | `ContainerAppSystemLogs_CL` |
+| Deploys | Deploys that succeeded | 90% | `Deployments_CL` |
+
+Availability and latency apply to apps with ingress; repo-agent and
+security-testing run jobs only. An app is *within budget* with a quarter or
+more of every budget left, *at risk* under a quarter, and *budget spent* at
+none. The targets are `OBJECTIVES` in `app/src/obsview/slo.py`. Alerting
+stays in Azure Monitor: these pages only show the figures.
 
 ## Costs
 

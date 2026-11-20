@@ -23,6 +23,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from . import slo
 from .costs import Cost
 from .deployments import Deploy, rate
 from .ops import Event, FailedRun
@@ -34,6 +35,9 @@ class App:
     title: str
     prefix: str
     hosts: tuple[str, ...] = ()
+    # Has a container app with ingress, so request SLIs apply. The job-only
+    # apps run Container Apps jobs and nothing else.
+    serves: bool = True
 
     @property
     def resource_group(self) -> str:
@@ -54,8 +58,8 @@ APPS: tuple[App, ...] = (
     App("finances", "Finances", "finances", ("finances.jaywithers.uk",)),
     App("career", "Career", "career"),
     App("market-agent", "Market agent", "marketagent", ("marketagent.jaywithers.uk",)),
-    App("security-testing", "Security testing", "sectest"),
-    App("repo-agent", "Repo agent", "repoagent"),
+    App("security-testing", "Security testing", "sectest", serves=False),
+    App("repo-agent", "Repo agent", "repoagent", serves=False),
     App("observability", "Observability", "observability", ("observability.jaywithers.uk",)),
 )
 
@@ -154,3 +158,27 @@ def summarise(
         spend=spend,
         errors=errors,
     )
+
+
+def slo_report(
+    app: App,
+    hours: list[slo.HttpHour] | None,
+    runs: list[slo.JobRun] | None,
+    deploys: list[Deploy] | None,
+    now: datetime,
+) -> slo.Report:
+    """`app`'s SLIs over the SLO window. None for any input means its query
+    failed, and the SLIs it feeds read "unavailable"."""
+    mine_hours = None if hours is None else [h for h in hours if app.owns_workload(h.workload)]
+    points: dict[str, list[slo.Point] | None] = {
+        "availability": None if mine_hours is None else slo.availability_points(mine_hours),
+        "latency": None if mine_hours is None else slo.latency_points(mine_hours),
+        "jobs": None
+        if runs is None
+        else slo.job_points(r for r in runs if app.owns_workload(r.job)),
+        "deploys": None if deploys is None else slo.deploy_points(deploys_for(app, deploys)),
+    }
+    slis = [
+        slo.measure(o, points[o.key], now) for o in slo.OBJECTIVES if app.serves or not o.web_only
+    ]
+    return slo.Report(app.slug, app.title, slis)

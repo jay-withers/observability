@@ -18,10 +18,11 @@
     <a class="brand" href="/{% if days %}?days={{ days }}{% endif %}">Observability <span class="env">{{ environment }}</span></a>
     <nav class="tabs" aria-label="Views">
       <a href="/apps?days={{ days }}" {% if page == "apps" %}aria-current="page"{% endif %}>Apps</a>
+      <a href="/slo?days={{ days }}" {% if page == "slo" %}aria-current="page"{% endif %}>SLOs</a>
       <a href="/platform?days={{ days }}" {% if page == "platform" %}aria-current="page"{% endif %}>Platform</a>
       <a href="/overall?days={{ days }}" {% if page == "overall" %}aria-current="page"{% endif %}>Overall</a>
     </nav>
-    {% if days %}
+    {% if days and show_range %}
     <div class="range" role="group" aria-label="Time range">
       {% for r in ranges %}
       <a href="?days={{ r }}" {% if r == days %}aria-current="true"{% endif %}>{{ r }}d</a>

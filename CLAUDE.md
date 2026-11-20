@@ -147,7 +147,7 @@ and workspace resolved by name, never by remote state.
   event tables keep 90 days (azure-container-apps), so the delta never shows
   on 60d or 90d, and console logs keep the workspace's 30, so errors reach
   back 30 days at most.
-- **The pages are Apps, Platform and Overall**, the estate's rows sliced by
+- **The pages are Apps, SLOs, Platform and Overall**, the estate's rows sliced by
   `apps.APPS`, plus the whole subscription's costs. `/` is a tile per page
   with its headline figures (`routes.home`): it reads the apps index's
   queries (`_index_queries`, so the warm-up covers both), every one
@@ -173,6 +173,22 @@ and workspace resolved by name, never by remote state.
   a permanent redirect for good). The session and cost-feed checks write a
   row every run, so Platform counts "no row in 48 hours" as a problem
   (`routes._ALWAYS_REPORT`) rather than leaving their section out.
+- **SLOs are `/slo` (a tile per app) and `/slo/<slug>`** (`slo.py`,
+  `apps.slo_report`). Every SLI is good events over valid ones against a
+  target in `slo.OBJECTIVES`: availability (no 5xx) and latency (within
+  `slo.LATENCY_MS`, a literal in the KQL too) from `ContainerAppHTTPLogs`,
+  only for apps with ingress (`App.serves`); job runs from
+  `ContainerAppSystemLogs_CL`; deploys from the shared deploy query. The
+  window is a fixed rolling 28 days whatever the range (inside the Container
+  Apps logs' 30-day retention), so the range picker is hidden there. Status
+  reads only the error budget left (`slo.AT_RISK`); burn rates are shown,
+  not alerted on. The HTTP query counts by hour and workload in KQL (a row
+  per request is too many to fetch), but every ratio and budget is Python.
+  The HTTP table is resource-specific (no `_CL`, no `_s`); its latency
+  column is read as `DurationMs` with `column_ifexists`, so if the name is
+  wrong the latency SLI reads "no data" rather than failing. Neither KQL is
+  exercised by the tests; check them against the workspace. The home page
+  reads the SLO queries too (`_home_queries`), so the warm-up covers them.
 - **App errors are console-log lines** (`errors.py`): `ERROR` or
   `CRITICAL`, or a 5xx access line, grouped in Python by first line with
   UUIDs, hex ids, numbers and quoted values masked. The query caps each

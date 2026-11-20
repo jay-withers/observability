@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_slo.html" import slo_badge, meter, burn %}
+{% block title %}{{ app.title }} SLOs · Observability{% endblock %}
+{% block body %}
+<p class="crumb"><a href="/slo?days={{ days }}">SLOs</a> ›</p>
+<h1>{{ app.title }}</h1>
+<p class="lede">{{ slo_badge(report.status, report.label) }} · its SLIs over the last {{ window_days }} days, rolling. Deploys, checks, costs and errors are on <a href="/apps/{{ app.slug }}?days={{ days }}">its app page</a>.</p>
+
+{% for s in report.slis %}
+<h2 class="section-title" id="{{ s.objective.key }}">{{ s.objective.title }}</h2>
+<div class="card slo">
+  <div class="slo-head">
+    <p class="sub">{{ s.objective.good }}, of all {{ s.objective.unit }}. Target {{ ratio(s.objective.target) }}.</p>
+    {{ slo_badge(s.status, s.label) }}
+  </div>
+  {% if s.status == "unavailable" %}
+  <p class="empty">Couldn't read this SLI's events just now; the rest of the page is current.</p>
+  {% elif s.status == "no-data" %}
+  <p class="empty">No {{ s.objective.unit }} in the last {{ window_days }} days, so no budget to spend.</p>
+  {% else %}
+  <section class="tiles slo-figures" aria-label="{{ s.objective.title }} figures">
+    <div class="tile">
+      <div class="label">SLI</div>
+      <div class="value">{{ ratio(s.ratio) }}</div>
+      <div class="delta">{{ "{:,}".format(s.good) }} of {{ "{:,}".format(s.total) }} {{ s.objective.unit }}</div>
+    </div>
+    <div class="tile">
+      {% if s.budget_left < 0 %}
+      <div class="label">Error budget overspent</div>
+      <div class="value">{{ budget(s.budget_left) }}</div>
+      {% else %}
+      <div class="label">Error budget left</div>
+      <div class="value">{{ budget(s.budget_left) }}</div>
+      {% endif %}
+      {{ meter(s) }}
+    </div>
+    <div class="tile">
+      <div class="label">Bad {{ s.objective.unit }}</div>
+      <div class="value">{{ "{:,}".format(s.bad) }}</div>
+      <div class="delta">of {{ "{:,.1f}".format(s.allowed) }} allowed</div>
+    </div>
+    <div class="tile">
+      <div class="label">Burn rate, 24h</div>
+      <div class="value">{{ burn(s.burn_day) }}</div>
+      <div class="delta">1× spends it in {{ window_days }} days</div>
+    </div>
+    <div class="tile">
+      <div class="label">Burn rate, 7d</div>
+      <div class="value">{{ burn(s.burn_week) }}</div>
+    </div>
+  </section>
+  <h3 class="chart-title">Error budget left, by day</h3>
+  <div class="chart short" data-chart="burndown" data-group="slo" data-key="{{ s.objective.key }}" role="img" aria-label="{{ s.objective.title }} error budget left per day over {{ window_days }} days"></div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+{% if report.charts.burndown %}
+<script type="application/json" id="chart-data">{{ payload | tojson }}</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+{% endif %}
+{% endblock %}
