@@ -19,6 +19,7 @@
     <nav class="tabs" aria-label="Views">
       <a href="/apps?days={{ days }}" {% if page == "apps" %}aria-current="page"{% endif %}>Apps</a>
       <a href="/platform?days={{ days }}" {% if page == "platform" %}aria-current="page"{% endif %}>Platform</a>
+      <a href="/overall?days={{ days }}" {% if page == "overall" %}aria-current="page"{% endif %}>Overall</a>
     </nav>
     {% if days %}
     <div class="range" role="group" aria-label="Time range">

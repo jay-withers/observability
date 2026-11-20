@@ -82,9 +82,48 @@ def test_bars_fold_the_tail_into_everything_else() -> None:
     assert services[0].width == 100.0
 
 
-def test_resource_group_bars_carry_their_area() -> None:
+def test_resource_group_bars_carry_their_areas_colour() -> None:
     view = build([row(date(2026, 11, 10), "rg-aks-dev", "AKS", 4.0)])
-    assert [(b.label, b.area) for b in view.groups] == [("rg-aks-dev", "aks")]
+    aks = costs.AREA_ORDER.index("aks") + 1
+    assert [(b.label, b.colour) for b in view.groups] == [("rg-aks-dev", aks)]
+    assert [(b.label, b.colour) for b in view.areas] == [("aks", aks)]
+
+
+def slice_view(rows: list[dict[str, Any]], days: int = 30) -> costs.View:
+    return costs.build(costs.parse(rows), days, NOW, budget=150.0, by_area=False)
+
+
+def test_a_slice_stacks_its_own_services_and_names_no_other_area() -> None:
+    rows = [
+        row(date(2026, 11, 17), "rg-gymlog-dev", "Container Apps", 1.0),
+        row(date(2026, 11, 17), "rg-gymlog-dev", "Storage", 0.25),
+    ]
+    view = slice_view(rows, days=7)
+    assert view.charts["series_keys"] == ["Container Apps", "Storage"]
+    assert view.charts["spend"]["series"]["Container Apps"][-1] == 1.0
+    assert set(view.charts["spend"]["series"]) == {"Container Apps", "Storage"}
+    # The treemap starts at the slice's resource groups, not the estate's areas.
+    assert view.charts["treemap"] == [
+        {
+            "name": "rg-gymlog-dev",
+            "children": [
+                {"name": "Container Apps", "value": 1.0},
+                {"name": "Storage", "value": 0.25},
+            ],
+        }
+    ]
+    assert all(b.colour == 0 for b in view.groups)
+
+
+def test_a_slices_daily_series_fold_the_tail_and_still_sum_to_the_total() -> None:
+    rows = [row(date(2026, 11, 17), "rg-platform-dev", f"svc{i}", float(10 - i)) for i in range(8)]
+    view = slice_view(rows, days=1)
+    keys = view.charts["series_keys"]
+    assert len(keys) == costs.SERVICE_SERIES
+    assert keys[-1] == costs.REST
+    series = view.charts["spend"]["series"]
+    assert sum(v[-1] for v in series.values()) == pytest.approx(view.total)
+    assert series[costs.REST][-1] == pytest.approx(6 + 5 + 4 + 3)
 
 
 def test_treemap_is_area_then_group_then_service_in_area_order() -> None:
@@ -223,3 +262,15 @@ def test_spend_matches_builds_total() -> None:
     )
     end = date(2026, 11, 15)
     assert costs.spend(rows, end, 3) == costs.build(rows, 3, NOW, 150.0, end=end).total == 2.0
+
+
+def test_a_slices_chart_keeps_a_service_that_nets_to_a_credit() -> None:
+    rows = [
+        row(date(2026, 11, 16), "rg-gymlog-dev", "Compute", 5.0),
+        row(date(2026, 11, 16), "rg-gymlog-dev", "Storage", 2.0),
+        row(date(2026, 11, 17), "rg-gymlog-dev", "Storage", -3.0),
+    ]
+    view = slice_view(rows, days=2)
+    series = view.charts["spend"]["series"]
+    assert "Storage" in view.charts["series_keys"]
+    assert sum(sum(v) for v in series.values()) == pytest.approx(view.total)

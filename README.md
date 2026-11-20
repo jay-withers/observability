@@ -224,17 +224,20 @@ data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
 the charts are drawn by `static/app.js` from the JSON the template embeds.
 `make app-run` serves it on demo data.
 
-The pages are **Apps** and **Platform**. `/apps` has a card per app and,
+The pages are **Apps**, **Platform** and **Overall**. `/apps` has a card per app and,
 under them, every app's deploys together (deploys are all apps': only
 container-apps-deploy records them). Each app has its own page,
 `/apps/<repo>`, with that app's deploys, checks, failed runs and crashes,
 spend and logged errors over the selected range. `/platform` is everything no
 app owns: landing zone, shared environment, Cloudflare and AKS drift, session
-resources, the cost feed, the shared resource groups' spend, and the
-subscription's month against the budget. Which rows belong to an app is set
-in `app/src/obsview/apps.py`: add a row there when a new app joins the
-estate, or its rows show up under Platform. The old `/deployments`, `/ops`
-and `/costs` URLs redirect.
+resources, the cost feed and the shared resource groups' spend. An app's and
+the platform's costs are only their own rows, stacked by their own services.
+`/overall` is the whole subscription's costs: the month against the budget,
+daily spend stacked by area, the treemap (area, resource group, service) and
+the range's spend by area, resource group and service. Which rows belong to
+an app is set in `app/src/obsview/apps.py`: add a row there when a new app
+joins the estate, or its rows show up under Platform. The old
+`/deployments`, `/ops` and `/costs` URLs redirect (`/costs` to Overall).
 
 ## Costs
 

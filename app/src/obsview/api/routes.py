@@ -147,9 +147,10 @@ def home() -> RedirectResponse:
 
 
 # The estate-wide views this replaced, kept as redirects so bookmarks land
-# somewhere: deploys are all apps', ops and costs mostly the platform's. Not
-# 301: browsers keep a permanent redirect for good, and the mapping may change.
-_MOVED = {"/deployments": "/apps", "/ops": "/platform", "/costs": "/platform"}
+# somewhere: deploys are all apps', ops mostly the platform's, and costs the
+# whole subscription's. Not 301: browsers keep a permanent redirect for good,
+# and the mapping may change.
+_MOVED = {"/deployments": "/apps", "/ops": "/platform", "/costs": "/overall"}
 
 
 def _moved(target: str) -> Any:
@@ -318,13 +319,15 @@ def _panels(
         oview = ops.build(pick.events(ops.parse(ops_rows)), pick.runs(failed), span, now)
 
     cost_rows = _ok(got["costs"], "costs")
-    cview = budget = None
+    cview = None
     if cost_rows is not None:
         all_costs = costs.parse(cost_rows)
         end = _cost_end(all_costs, now)
-        cview = costs.build(pick.costs(all_costs), span, now, settings().budget, end=end)
-        # The budget is the subscription's, so its card counts every group.
-        budget = costs.build(all_costs, span, now, settings().budget, end=end)
+        # Only the slice's rows, stacked by its own services: the budget and
+        # the estate's areas are the Overall page's.
+        cview = costs.build(
+            pick.costs(all_costs), span, now, settings().budget, end=end, by_area=False
+        )
 
     egroups, error_total = _errors(_ok(got["errors"], "errors"), pick.workload, span, now)
     groups: dict[str, Any] = {}
@@ -335,7 +338,6 @@ def _panels(
     return {
         "oview": oview,
         "cview": cview,
-        "budget": budget,
         "errors": egroups,
         "error_total": error_total,
         "error_cap": errors.PER_WORKLOAD,
@@ -367,7 +369,6 @@ def app_page(request: Request, slug: str, days: str = Query(default="")) -> Any:
         workload=app.owns_workload,
     )
     panels = _panels(got, pick, span, now)
-    del panels["budget"]  # the budget card is the platform's
     panels["payload"]["groups"] = {"deploy": dview.charts, **panels["payload"]["groups"]}
     return templates.TemplateResponse(
         request, "app.html", _context(request, "apps", span, app=app, dview=dview, **panels)
@@ -401,7 +402,31 @@ def platform_page(request: Request, days: str = Query(default="")) -> Any:
     if oview is not None:
         present = {s.kind for s in oview.sections}
         silent = [t for k, t, _ in ops.SECTIONS if k in _ALWAYS_REPORT and k not in present]
-    panels["budget_view"] = panels.pop("budget")
     return templates.TemplateResponse(
         request, "platform.html", _context(request, "platform", span, silent=silent, **panels)
+    )
+
+
+@router.get("/overall", response_class=HTMLResponse, include_in_schema=False)
+def overall_page(request: Request, days: str = Query(default="")) -> Any:
+    """The whole subscription's costs: the budget, and every resource group's
+    spend broken down by area, group and service. The same query and window
+    as the other pages, so they share the cache."""
+    span = _range(days)
+    now = datetime.now(UTC)
+    kql, window = _app_queries(span, now)["costs"]
+    got = _gather({"costs": (kql, window)})["costs"]
+    if isinstance(got, QueryFailed):
+        return _failed(request, "overall", span, got)
+    all_costs = costs.parse(got)
+    # The same end as the app and platform pages, so a range covers the same days.
+    view = costs.build(all_costs, span, now, settings().budget, end=_cost_end(all_costs, now))
+    payload = {
+        "groups": {"costs": view.charts},
+        "now": deployments.js_time(now),
+        "days": span,
+        "symbol": view.symbol,
+    }
+    return templates.TemplateResponse(
+        request, "overall.html", _context(request, "overall", span, cview=view, payload=payload)
     )

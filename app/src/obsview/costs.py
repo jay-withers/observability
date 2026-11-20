@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import calendar
 from collections import defaultdict
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -37,6 +38,10 @@ OTHER = "landing zone and other"
 # The order areas are stacked and coloured in. Colour follows this order,
 # never the month's ranking.
 AREA_ORDER = ("platform", "apps", "market-agent", "aks", OTHER)
+# The series a slice's daily chart stacks: its top services, the rest folded
+# into one, within the five chart colours.
+SERVICE_SERIES = 5
+REST = "everything else"
 
 KQL = """Costs_CL
 | summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName
@@ -121,7 +126,8 @@ class Bar:
     label: str
     value: float
     width: float
-    area: str = ""
+    # The 1-based chart colour, or 0 for the plain bar colour.
+    colour: int = 0
 
 
 @dataclass
@@ -145,6 +151,7 @@ class View:
     left_out: int
     groups: list[Bar]
     services: list[Bar]
+    areas: list[Bar]
     charts: dict[str, Any] = field(default_factory=dict)
 
     def scale(self, value: float) -> float:
@@ -159,9 +166,15 @@ def build(
     now: datetime,
     budget: float,
     end: date | None = None,
+    by_area: bool = True,
 ) -> View:
     """`end` is the range's last day; by default the last day with data. An
-    app's page passes the estate's, so a quiet app's range isn't shifted."""
+    app's page passes the estate's, so a quiet app's range isn't shifted.
+
+    `by_area` is the whole estate's view: the daily chart stacks the fixed
+    areas and the treemap starts at them. A slice (one app, the platform)
+    passes False: its chart stacks its own top services and its treemap
+    starts at its resource groups, so nothing on it names another area."""
     today = now.astimezone(UTC).date()
     # One currency: summing two would be meaningless. The billing currency is
     # the one most rows are in; any others are counted and left out.
@@ -203,9 +216,11 @@ def build(
 
     by_group: dict[str, float] = defaultdict(float)
     by_service: dict[str, float] = defaultdict(float)
+    by_area_totals: dict[str, float] = defaultdict(float)
     for c in in_range:
         by_group[c.resource_group] += c.cost
         by_service[c.service] += c.cost
+        by_area_totals[c.area] += c.cost
 
     return View(
         days=days,
@@ -227,17 +242,58 @@ def build(
         # rather than look broken.
         data_through=max((c.day for c in costs if c.day <= today), default=None),
         left_out=left_out,
-        groups=_bars(by_group, area_of=area),
+        groups=_bars(by_group, colour=_group_colour if by_area else None),
         services=_bars(by_service, limit=8),
-        charts={
-            "spend": _daily(costs, end, days),
-            "treemap": _treemap(in_range),
-            "areas": list(AREA_ORDER),
-        },
+        areas=_bars(by_area_totals, colour=_area_colour),
+        charts=_charts(costs, in_range, end, days, by_area),
     )
 
 
-def _bars(totals: dict[str, float], limit: int = 0, area_of: Any = None) -> list[Bar]:
+def _area_colour(name: str) -> int:
+    return AREA_ORDER.index(name) + 1
+
+
+def _group_colour(resource_group: str) -> int:
+    return _area_colour(area(resource_group))
+
+
+def _charts(
+    costs: list[Cost], in_range: list[Cost], end: date, days: int, by_area: bool
+) -> dict[str, Any]:
+    """The daily chart's series (`series_keys`, in colour order) and the
+    treemap. `by_area` tells the page the treemap's top level is the areas,
+    coloured as the chart's; a slice's is its resource groups."""
+    if by_area:
+        keys = list(AREA_ORDER)
+        return {
+            "spend": _daily(costs, end, days, keys, lambda c: c.area),
+            "treemap": _treemap(in_range, AREA_ORDER, lambda c: c.area),
+            "series_keys": keys,
+            "by_area": True,
+        }
+    totals: dict[str, float] = defaultdict(float)
+    for c in in_range:
+        totals[c.service] += c.cost
+    # Every service with a row, even one netting to zero or less (a credit),
+    # so the stacked days still add up to the range's total.
+    ranked = sorted(totals, key=lambda s: -totals[s])
+    top = ranked if len(ranked) <= SERVICE_SERIES else ranked[: SERVICE_SERIES - 1]
+    keys = top + ([REST] if len(ranked) > len(top) else [])
+    chosen = set(top)
+    groups = sorted({c.resource_group for c in in_range})
+    return {
+        "spend": _daily(
+            costs, end, days, keys, lambda c: c.service if c.service in chosen else REST
+        ),
+        "treemap": _treemap(in_range, groups, lambda c: c.resource_group, nested=False),
+        "series_keys": keys,
+        "by_area": False,
+    }
+
+
+def _bars(
+    totals: dict[str, float], limit: int = 0, colour: Callable[[str], int] | None = None
+) -> list[Bar]:
     ranked = sorted(totals.items(), key=lambda kv: -kv[1])
     if limit and len(ranked) > limit:
         rest = sum(v for _, v in ranked[limit - 1 :])
@@ -248,50 +304,62 @@ def _bars(totals: dict[str, float], limit: int = 0, area_of: Any = None) -> list
             label=label,
             value=value,
             width=100.0 * value / top if top else 0.0,
-            area=area_of(label) if area_of else "",
+            colour=colour(label) if colour else 0,
         )
         for label, value in ranked
         if value > 0
     ]
 
 
-def _daily(costs: list[Cost], end: date, days: int) -> dict[str, Any]:
+def _daily(
+    costs: list[Cost], end: date, days: int, keys: list[str], key: Callable[[Cost], str]
+) -> dict[str, Any]:
     dates = [end - timedelta(days=i) for i in range(days - 1, -1, -1)]
     index = {d: i for i, d in enumerate(dates)}
-    series = {a: [0.0] * len(dates) for a in AREA_ORDER}
+    series = {k: [0.0] * len(dates) for k in keys}
     for c in costs:
         i = index.get(c.day)
-        if i is not None:
-            series[c.area][i] += c.cost
+        k = key(c)
+        if i is not None and k in series:
+            series[k][i] += c.cost
     return {
         "dates": [d.isoformat() for d in dates],
-        "series": {a: [round(v, 2) for v in values] for a, values in series.items()},
+        "series": {k: [round(v, 2) for v in values] for k, values in series.items()},
     }
 
 
-def _treemap(month: list[Cost]) -> list[dict[str, Any]]:
-    """Area > resource group > service, over the range."""
+def _treemap(
+    in_range: list[Cost],
+    order: Iterable[str],
+    key: Callable[[Cost], str],
+    nested: bool = True,
+) -> list[dict[str, Any]]:
+    """Over the range: `key` (an area) > resource group > service, or, not
+    nested, resource group > service."""
     tree: dict[str, dict[str, dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(float))
     )
-    for c in month:
-        tree[c.area][c.resource_group][c.service] += c.cost
+    for c in in_range:
+        tree[key(c)][c.resource_group][c.service] += c.cost
+
+    def services(totals: dict[str, float]) -> list[dict[str, Any]]:
+        return [
+            {"name": svc, "value": round(v, 2)}
+            for svc, v in sorted(totals.items(), key=lambda kv: -kv[1])
+            if v > 0
+        ]
+
     nodes = []
-    for a in AREA_ORDER:
-        if a not in tree:
+    for top in order:
+        if top not in tree:
             continue
         groups = [
-            {
-                "name": rg,
-                "children": [
-                    {"name": svc, "value": round(v, 2)}
-                    for svc, v in sorted(services.items(), key=lambda kv: -kv[1])
-                    if v > 0
-                ],
-            }
-            for rg, services in sorted(tree[a].items(), key=lambda kv: -sum(kv[1].values()))
+            {"name": rg, "children": services(svcs)}
+            for rg, svcs in sorted(tree[top].items(), key=lambda kv: -sum(kv[1].values()))
         ]
         groups = [g for g in groups if g["children"]]
-        if groups:
-            nodes.append({"name": a, "children": groups})
+        if not nested:
+            nodes.extend(groups)
+        elif groups:
+            nodes.append({"name": top, "children": groups})
     return nodes
