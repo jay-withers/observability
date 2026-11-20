@@ -225,7 +225,10 @@ data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
 the charts are drawn by `static/app.js` from the JSON the template embeds.
 `make app-run` serves it on demo data.
 
-The pages are **Apps**, **Platform** and **Overall**. `/apps` has a card per app and,
+The home page, `/`, is a tile for each of the pages, **Apps**, **Platform** and
+**Overall**, with its headline: the apps' deploys, problems and errors, the
+platform's problems now and errors, and the month's spend against the budget.
+`/apps` has a tile per app and,
 under them, every app's deploys together (deploys are all apps': only
 container-apps-deploy records them). Each app has its own page,
 `/apps/<repo>`, with that app's deploys, checks, failed runs and crashes,

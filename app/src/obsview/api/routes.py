@@ -77,8 +77,8 @@ def source() -> LogsSource:
 
 
 def warm() -> None:
-    """Fill the cache for the default page (/apps at the default range), so
-    the first open after a start is fast."""
+    """Fill the cache for the home page and /apps at the default range (the
+    same queries), so the first open after a start is fast."""
     for key, result in _gather(_index_queries(DEFAULT_RANGE, datetime.now(UTC))).items():
         if isinstance(result, QueryFailed):
             logger.warning("cache warm-up of %s failed; the first page load will retry", key)
@@ -141,9 +141,74 @@ def manifest() -> dict[str, Any]:
 # --- pages --------------------------------------------------------------------
 
 
-@router.get("/", include_in_schema=False)
-def home() -> RedirectResponse:
-    return RedirectResponse("/apps", status_code=status.HTTP_303_SEE_OTHER)
+@dataclass(frozen=True)
+class _Headline:
+    """A home tile's figures: problems now and error lines over the range.
+    None means that query failed, and the tile says so."""
+
+    problems: int | None
+    errors: int | None
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home(request: Request, days: str = Query(default="")) -> Any:
+    """A tile per page, each with its headline: the apps' deploys, problems
+    and errors, the platform's, and the month's spend against the budget.
+    The apps index's queries, so they share its cache and the warm-up. Every
+    query is optional here: a failed one leaves its figures "unavailable",
+    and each tile still opens its page."""
+    span = _range(days)
+    now = datetime.now(UTC)
+    got = _gather(_index_queries(span, now))
+    deploy_rows = _ok(got["deploys"], "deploys")
+    ops_rows, error_rows = _ok(got["ops"], "ops"), _ok(got["errors"], "errors")
+    cost_rows = _ok(got["costs"], "costs")
+
+    deploys = None
+    if deploy_rows is not None:
+        since = deployments.range_start(span, now)
+        slugs = {a.slug for a in apps.APPS}
+        # The apps' tiles' sum: a deploy of a repo no longer in APPS is on no tile.
+        deploys = [d for d in deployments.parse(deploy_rows) if d.when >= since and d.repo in slugs]
+
+    app_problems = platform_problems = None
+    if ops_rows is not None:
+        current = list(ops.latest(ops.parse(ops_rows), now).values())
+        platform = apps.platform_events(current)
+        # The apps' tiles' sum, as `apps.summarise` counts each.
+        app_problems = sum(e.problem for a in apps.APPS for e in apps.events_for(a, current))
+        platform_problems = sum(e.problem for e in platform) + len(
+            _silent({e.kind for e in platform})
+        )
+
+    app_errors = platform_errors = None
+    if error_rows is not None:
+        totals = errors.totals(error_rows)
+        app_errors = sum(n for w, n in totals.items() if apps.app_workload(w))
+        platform_errors = sum(totals.values()) - app_errors
+
+    cview = None
+    if cost_rows is not None:
+        all_costs = costs.parse(cost_rows)
+        cview = costs.build(all_costs, span, now, settings().budget, end=_cost_end(all_costs, now))
+
+    return templates.TemplateResponse(
+        request,
+        "home.html",
+        _context(
+            request,
+            "home",
+            span,
+            app_count=len(apps.APPS),
+            deploys=deploys,
+            success_pct=None
+            if deploys is None
+            else deployments.rate(sum(d.succeeded for d in deploys), len(deploys)),
+            apps_now=_Headline(app_problems, app_errors),
+            platform_now=_Headline(platform_problems, platform_errors),
+            cview=cview,
+        ),
+    )
 
 
 # The estate-wide views this replaced, kept as redirects so bookmarks land
@@ -388,6 +453,12 @@ _PLATFORM = _Slice(
 _ALWAYS_REPORT = ("session", "cost-feed")
 
 
+def _silent(kinds: set[str]) -> list[str]:
+    """The always-reporting checks with no current row, by title, given the
+    kinds of the platform's current rows."""
+    return [t for k, t, _ in ops.SECTIONS if k in _ALWAYS_REPORT and k not in kinds]
+
+
 @router.get("/platform", response_class=HTMLResponse, include_in_schema=False)
 def platform_page(request: Request, days: str = Query(default="")) -> Any:
     """Everything no app owns. Every query here is optional: one that fails
@@ -398,10 +469,7 @@ def platform_page(request: Request, days: str = Query(default="")) -> Any:
     del specs["deploys"]  # no platform deploys are recorded
     panels = _panels(_gather(specs), _PLATFORM, span, now)
     oview = panels["oview"]
-    silent = []
-    if oview is not None:
-        present = {s.kind for s in oview.sections}
-        silent = [t for k, t, _ in ops.SECTIONS if k in _ALWAYS_REPORT and k not in present]
+    silent = [] if oview is None else _silent({s.kind for s in oview.sections})
     return templates.TemplateResponse(
         request, "platform.html", _context(request, "platform", span, silent=silent, **panels)
     )

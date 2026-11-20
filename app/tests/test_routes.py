@@ -99,10 +99,128 @@ def test_apps_index_renders_all_apps_deploys_with_chart_payload(
     assert 'data-group="deploy" data-chart="outcomes"' in response.text
 
 
-def test_root_redirects_to_apps(client: TestClient) -> None:
+def test_home_is_a_tile_per_page(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
+    response = client.get("/?days=30")
+    assert response.status_code == 200
+    tiles = re.findall(r'<a class="card nav-tile" href="([^"]+)"', response.text)
+    assert tiles == ["/apps?days=30", "/platform?days=30", "/overall?days=30"]
+    assert "spent in" in response.text
+    assert "unavailable" not in response.text
+
+
+def test_home_needs_a_session(client: TestClient) -> None:
     response = client.get("/", follow_redirects=False)
-    assert response.headers["location"] == "/apps"
+    assert response.status_code in (303, 307)
+    assert response.headers["location"].startswith("/login")
+
+
+def test_the_brand_opens_home_at_the_same_range(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    assert '<a class="brand" href="/?days=30">' in client.get("/apps?days=30").text
+
+
+def test_home_splits_problems_and_errors_between_apps_and_the_platform(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+    ops_rows = [
+        {"TimeGenerated": now, "Kind": k, "Name": n, "Status": s, "Detail": ""}
+        for k, n, s in (
+            ("heartbeat", "caj-gymlog-dev-backup", "overdue"),  # gym-log's
+            ("drift", "finances/terraform", "drifted"),  # finances'
+            ("drift", "azure-landingzone/hub", "drifted"),  # the platform's
+            ("session", "vm", "ok"),
+            ("cost-feed", "Costs_CL", "ok"),
+        )
+    ]
+    deploy_rows = [
+        {"TimeGenerated": now, "Repo": r, "Outcome": "success"}
+        # The last is a repo no longer in apps.APPS: on no app's tile, so not in the sum.
+        for r in ("gym-log", "finances", "retired-app")
+    ]
+    error_rows = [
+        {"Workload": "ca-gymlog-dev", "Total": 4, "TimeGenerated": now, "Log_s": "ERROR x"},
+        {"Workload": "ca-platform-thing", "Total": 3, "TimeGenerated": now, "Log_s": "ERROR y"},
+    ]
+
+    class Rows:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            first = kql.splitlines()[0]
+            if "OpsEvents_CL" in first:
+                return ops_rows
+            if "ContainerAppConsoleLogs" in first:
+                return error_rows
+            if "Deployments_CL" in first:
+                return deploy_rows
+            return []
+
+    use(monkeypatch, Rows())
+    sign_in(client)
+    text = client.get("/").text
+    apps_tile, platform_tile, _ = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)
+    assert "2 problems" in apps_tile
+    assert '<div class="value">2</div>' in apps_tile
+    assert "4 error lines" in apps_tile
+    assert '<div class="value">1</div>' in platform_tile
+    # The big number is the count; the badge doesn't say it again.
+    assert "needs attention" in platform_tile
+    assert "problem</span>" not in platform_tile
+    assert "3 error lines" in platform_tile
+
+
+def test_home_counts_a_quiet_always_reporting_check_as_a_platform_problem(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    text = client.get("/").text
+    platform_tile = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)[1]
+    # Session resources and the cost feed, as on /platform.
+    assert '<div class="value">2</div>' in platform_tile
+
+
+def test_home_with_no_budget_says_so_rather_than_over_budget(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BUDGET", "0")
+    settings.cache_clear()
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    overall_tile = re.findall(r'<a class="card nav-tile".*?</a>', client.get("/").text, re.S)[2]
+    assert "budget</span>" not in overall_tile
+    assert "No budget set" in overall_tile
+
+
+def test_home_renders_around_every_query_failing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Failing())
+    sign_in(client)
+    response = client.get("/")
+    assert response.status_code == 200
+    for what in ("Deploys", "Checks", "Costs"):
+        assert f"{what} unavailable" in response.text
+    assert len(re.findall(r'class="card nav-tile"', response.text)) == 3
+
+
+def test_home_reads_the_warmed_queries(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, timedelta]] = []
+
+    class Spy:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            seen.append((kql, timespan))
+            return []
+
+    use(monkeypatch, Spy())
+    sign_in(client)
+    assert client.get("/").status_code == 200
+    warmed = routes._index_queries(routes.DEFAULT_RANGE, datetime.now(UTC))
+    assert sorted(k for k, _ in seen) == sorted(k for k, _ in warmed.values())
 
 
 @pytest.mark.parametrize(

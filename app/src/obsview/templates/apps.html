@@ -4,16 +4,17 @@
 <h1>Apps</h1>
 <p class="lede">Each app's deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}. Open one for its own page; the shared infrastructure is under <a href="/platform?days={{ days }}">Platform</a>.</p>
 
-<div class="apps">
+<div class="nav-tiles apps-grid">
   {% for s in summaries %}
-  <a class="card app app-link" href="/apps/{{ s.app.slug }}?days={{ days }}">
-    <div class="name"><span>{{ s.app.title }}</span>
+  <a class="card nav-tile" href="/apps/{{ s.app.slug }}?days={{ days }}">
+    <div class="head"><span class="title">{{ s.app.title }}</span><span class="go" aria-hidden="true">›</span></div>
+    <div>
       {% if s.problems %}<span class="badge st-failed">{{ s.problems }} problem{{ "s" if s.problems != 1 }}</span>
       {% elif s.errors %}<span class="badge st-overdue">{{ s.errors }} error{{ "s" if s.errors != 1 }}</span>
       {% elif s.problems is not none %}<span class="badge st-ok">ok</span>{% endif %}
     </div>
     <div class="meta">{% if s.last %}{{ s.last.version }} · {{ ago(s.last.when, now) }}{% else %}No deploys recorded{% endif %}</div>
-    <div class="meta">
+    <div class="meta foot">
       {{ s.deploys }} deploy{{ "s" if s.deploys != 1 }}{% if s.success_pct is not none %} · {{ "%.0f" | format(s.success_pct) }}% ok{% endif %}
       · {% if s.errors is none %}errors unavailable{% else %}{{ s.errors }} error line{{ "s" if s.errors != 1 }}{% endif %}
       · {% if s.spend is none %}spend unavailable{% else %}{{ symbol }}{{ "{:,.2f}".format(s.spend) }}{% endif %}
