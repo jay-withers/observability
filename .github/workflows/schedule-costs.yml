@@ -1,7 +1,7 @@
 name: schedule-costs
 
 # Daily cost feed: scripts/check-costs.sh reads the last seven days of cost
-# per resource group and service from Cost Management, and this posts them to
+# per resource and service from Cost Management, and this posts them to
 # the platform's Costs_CL table for obsview's Costs view. Seven days each
 # run because Azure revises a day for about three afterwards.
 #

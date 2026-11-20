@@ -35,7 +35,7 @@ templates.env.globals["js_time"] = deployments.js_time
 # The ranges on offer. Anything else in `?days=` falls back to the default
 # rather than erroring: it is a bookmark, not an API.
 RANGES = (1, 3, 5, 7, 30, 60, 90)
-DEFAULT_RANGE = 30
+DEFAULT_RANGE = 7
 
 
 # /readyz's query: the default page's deploy query, which the start-up warm-up has

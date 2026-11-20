@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Reads the last seven days of cost per resource group and service from Cost
+# Reads the last seven days of cost per resource and service from Cost
 # Management and prints them as Costs_CL rows in a JSON array, for
 # schedule-costs.yml to post:
 #
 #   check-costs.sh <subscription-id> [run-url]
 #
 # Seven days, every night, because Azure revises a day's figure for about
-# three days after it; readers take the latest row per UsageDate,
-# ResourceGroup and ServiceName. Rows of zero are dropped: most services on a
+# three days after it; readers take each UsageDate's rows from the latest run
+# that posted it, and sum them. Rows of zero are dropped: most services on a
 # scale-to-zero estate cost nothing most days.
+#
+# Grouped by ResourceId and ServiceName: the query API takes two groupings at
+# most, so ResourceGroup is read from the (lower-cased) ID rather than grouped
+# on. Costs_CL needs azure-container-apps' ResourceId column, or it is dropped
+# at ingestion; the totals are right either way.
 #
 # ActualCost is the charge before any credit, so on a Visual Studio
 # subscription this is what the estate would cost on pay-as-you-go.
-# Subscription-level charges with no resource group read `(none)`.
+# Charges with no resource group (subscription-level ones) read `(none)`.
 #
 # One query through curl, following nextLink: Reader on the subscription is
 # enough to read costs. Cost Management throttles hard, and a 429 can last
@@ -41,7 +46,7 @@ body="$(jq -n --arg from "$from" --arg to "$to" '{
     granularity: "Daily",
     aggregation: {totalCost: {name: "Cost", function: "Sum"}},
     grouping: [
-      {type: "Dimension", name: "ResourceGroupName"},
+      {type: "Dimension", name: "ResourceId"},
       {type: "Dimension", name: "ServiceName"}
     ]
   }
@@ -90,9 +95,11 @@ printf '%s\n' "${pages[@]}" | jq -cs --arg time "$time" --arg run "$run_url" '
    | $p.rows[] | [[$p.columns[].name], .] | transpose | map({(.[0]): .[1]}) | add
    | select(.Cost != 0)
    | (.UsageDate | tostring) as $d
+   | ((.ResourceId // "") | ascii_downcase) as $id
    | {TimeGenerated: $time,
       UsageDate: "\($d[0:4])-\($d[4:6])-\($d[6:8])T00:00:00Z",
-      ResourceGroup: (if (.ResourceGroupName // "") == "" then "(none)" else (.ResourceGroupName | ascii_downcase) end),
+      ResourceGroup: ($id | capture("/resourcegroups/(?<rg>[^/]+)").rg // "(none)"),
+      ResourceId: $id,
       ServiceName: (.ServiceName // "(none)"),
       Cost, Currency, RunUrl: $run}]' \
   | tee >(jq -r 'group_by(.Currency)[] | "\(length) row(s), \(map(.Cost) | add * 100 | round / 100) \(.[0].Currency) over seven days"' >&2)

@@ -131,11 +131,19 @@ and workspace resolved by name, never by remote state.
   Grafana's did: the feed lags a day or two. The daily chart ends at the
   last day with data for the same reason. The budget is `BUDGET`
   (default 150).
+- **A day's costs are its latest run's rows, summed** (`costs.KQL`), not
+  `arg_max` per key: each run re-posts seven days, a key that fell to zero
+  has no new row to replace its old one, and the rows from before
+  `ResourceId` was sent (per group and service) would double the newer
+  per-resource ones. `ResourceId` is azure-container-apps' column, read with
+  `column_ifexists`; the feed groups by it and service (Cost Management
+  takes two groupings at most) and reads the resource group from the ID.
 - **Costs follow the range; the budget card stays the month.** The total,
   the breakdowns and the treemap cover the selected range, ending on the
   last day with data. The "vs prior" delta is shown only when the data
   reaches back to the start of the prior range, so retention can't pass for
-  a rise from nothing. The ranges are `routes.RANGES` (1 to 90 days); the
+  a rise from nothing. The ranges are `routes.RANGES` (1 to 90 days), 7 by
+  default; the
   event tables keep 90 days (azure-container-apps), so the delta never shows
   on 60d or 90d, and console logs keep the workspace's 30, so errors reach
   back 30 days at most.

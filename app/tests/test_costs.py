@@ -10,11 +10,21 @@ from obsview import costs
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 
 
-def row(day: date, rg: str, service: str, cost: float, currency: str = "USD") -> dict[str, Any]:
+def row(
+    day: date,
+    rg: str,
+    service: str,
+    cost: float,
+    currency: str = "USD",
+    resource: str = "",
+) -> dict[str, Any]:
     return {
         "UsageDate": datetime(day.year, day.month, day.day, tzinfo=UTC),
         "ResourceGroup": rg,
         "ServiceName": service,
+        "ResourceId": f"/subscriptions/s/resourceGroups/{rg}/providers/p/{resource}"
+        if resource
+        else "",
         "Cost": cost,
         "Currency": currency,
     }
@@ -107,8 +117,13 @@ def test_a_slice_stacks_its_own_services_and_names_no_other_area() -> None:
         {
             "name": "rg-gymlog-dev",
             "children": [
-                {"name": "Container Apps", "value": 1.0},
-                {"name": "Storage", "value": 0.25},
+                {
+                    "name": costs.UNATTRIBUTED,
+                    "children": [
+                        {"name": "Container Apps", "value": 1.0},
+                        {"name": "Storage", "value": 0.25},
+                    ],
+                }
             ],
         }
     ]
@@ -135,7 +150,7 @@ def test_treemap_is_area_then_group_then_service_in_area_order() -> None:
     assert [n["name"] for n in tree] == ["platform", "apps"]
     assert tree[1]["children"][0] == {
         "name": "rg-gymlog-dev",
-        "children": [{"name": "Storage", "value": 1.0}],
+        "children": [{"name": costs.UNATTRIBUTED, "children": [{"name": "Storage", "value": 1.0}]}],
     }
 
 
@@ -274,3 +289,40 @@ def test_a_slices_chart_keeps_a_service_that_nets_to_a_credit() -> None:
     series = view.charts["spend"]["series"]
     assert "Storage" in view.charts["series_keys"]
     assert sum(sum(v) for v in series.values()) == pytest.approx(view.total)
+
+
+def test_resources_are_keyed_by_id_and_labelled_with_their_group() -> None:
+    rows = [
+        row(date(2026, 11, 10), "rg-gymlog-dev", "Storage", 2.0, resource="default"),
+        row(date(2026, 11, 10), "rg-career-dev", "Storage", 1.0, resource="default"),
+        row(date(2026, 11, 10), "rg-career-dev", "Key Vault", 0.5),
+    ]
+    view = build(rows)
+    assert [(b.label, b.value) for b in view.resources] == [
+        ("default · rg-gymlog-dev", 2.0),
+        ("default · rg-career-dev", 1.0),
+        (f"{costs.UNATTRIBUTED} · rg-career-dev", 0.5),
+    ]
+
+
+def test_the_treemap_has_a_resource_level() -> None:
+    rows = [row(date(2026, 11, 10), "rg-gymlog-dev", "Storage", 1.0, resource="STGymlog")]
+    tree = slice_view(rows).charts["treemap"]
+    assert tree == [
+        {
+            "name": "rg-gymlog-dev",
+            "children": [{"name": "stgymlog", "children": [{"name": "Storage", "value": 1.0}]}],
+        }
+    ]
+
+
+def test_same_named_resources_of_different_types_stay_apart_in_the_treemap() -> None:
+    rows = [
+        row(date(2026, 11, 10), "rg-x", "Container Apps", 2.0, resource="containerApps/ca-x"),
+        row(date(2026, 11, 10), "rg-x", "Managed Identity", 1.0, resource="identities/ca-x"),
+    ]
+    group = slice_view(rows).charts["treemap"][0]
+    assert [(n["name"], n["children"][0]["value"]) for n in group["children"]] == [
+        ("ca-x", 2.0),
+        ("ca-x", 1.0),
+    ]

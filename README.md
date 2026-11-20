@@ -108,8 +108,9 @@ scripts' tests.
   `make sessions` prints the rows locally.
 - **Costs are read here, daily.** `schedule-costs.yml` runs
   `scripts/check-costs.sh`, which asks Cost Management for the last seven days
-  per resource group and service (Azure revises a day for about three) and
-  posts them to `Costs_CL`. The run also records a `cost-feed` row in
+  per resource and service (Azure revises a day for about three) and
+  posts them to `Costs_CL`, with each row's resource group read from its
+  resource ID (the query takes two groupings at most). The run also records a `cost-feed` row in
   `OpsEvents_CL`, so a broken feed alerts instead of leaving the dashboard
   stale. Both checks run as this repo's pipeline identity, whose subscription
   Reader is enough for Resource Graph and Cost Management. `make costs` prints
@@ -233,8 +234,10 @@ app owns: landing zone, shared environment, Cloudflare and AKS drift, session
 resources, the cost feed and the shared resource groups' spend. An app's and
 the platform's costs are only their own rows, stacked by their own services.
 `/overall` is the whole subscription's costs: the month against the budget,
-daily spend stacked by area, the treemap (area, resource group, service) and
-the range's spend by area, resource group and service. Which rows belong to
+daily spend stacked by area, the treemap (area, resource group, resource,
+service) and the range's spend by area, resource group, service and
+resource. Every page opens on the last 7 days, and its section links stay
+pinned while it scrolls. Which rows belong to
 an app is set in `app/src/obsview/apps.py`: add a row there when a new app
 joins the estate, or its rows show up under Platform. The old
 `/deployments`, `/ops` and `/costs` URLs redirect (`/costs` to Overall).

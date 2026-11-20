@@ -110,8 +110,8 @@ def test_root_redirects_to_apps(client: TestClient) -> None:
     [
         ("/deployments?days=7", "/apps?days=7"),
         ("/ops?days=90", "/platform?days=90"),
-        ("/costs", "/overall?days=30"),
-        ("/costs?days=junk", "/overall?days=30"),
+        ("/costs", "/overall?days=7"),
+        ("/costs?days=junk", "/overall?days=7"),
     ],
 )
 def test_the_old_views_redirect(client: TestClient, old: str, new: str) -> None:
@@ -140,7 +140,7 @@ def test_unknown_range_falls_back_to_the_default(
     response = client.get("/apps?days=12345")
     assert response.status_code == 200
     assert deployments.window(routes.DEFAULT_RANGE) in recording.spans
-    assert "No deploys in the last 30 days" in response.text
+    assert "No deploys in the last 7 days" in response.text
     # No charts to draw, so no chart script either.
     assert "echarts" not in response.text
 
@@ -245,7 +245,7 @@ def two_groups(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class Costs:
         def query(self, kql: str, timespan: timedelta) -> list[Row]:
-            return rows if kql.startswith("Costs_CL") else []
+            return rows if "Costs_CL" in kql.split("\n", 1)[0] else []
 
     use(monkeypatch, Costs())
 
@@ -592,7 +592,7 @@ def test_deployment_app_cards_link_to_the_app_page(
     sign_in(client)
     text = client.get("/apps").text
     deploys = text[text.index('id="deployments"') :]
-    assert 'href="/apps/gym-log?days=30"' in deploys
+    assert 'href="/apps/gym-log?days=7"' in deploys
 
 
 class FailedRunsOnlyBroken:
@@ -626,3 +626,25 @@ def test_apps_index_does_not_run_the_failed_runs_query(
     sign_in(client)
     assert client.get("/apps").status_code == 200
     assert not any("ContainerAppSystemLogs_CL" in k for k in seen)
+
+
+def test_the_default_range_is_seven_days(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    text = client.get("/apps").text
+    assert re.search(r'<a href="\?days=7" aria-current="true">7d</a>', text)
+
+
+@pytest.mark.parametrize("path", ["/apps/gym-log", "/platform"])
+def test_section_links_are_on_the_page_they_jump_within(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    text = client.get(path).text
+    nav = re.search(r'<nav class="jump".*?</nav>', text, re.S)
+    assert nav
+    for target in re.findall(r'href="#([a-z]+)"', nav.group(0)):
+        assert f'id="{target}"' in text

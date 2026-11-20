@@ -1,10 +1,14 @@
 """The Costs panels, from `Costs_CL`.
 
-`schedule-costs` posts the last seven days per resource group and service
-every day, because Azure revises a day for about three. So a day has several
-rows, and the latest post wins: the KQL keeps one row per (UsageDate,
-ResourceGroup, ServiceName) with `arg_max`. Figures are ActualCost, before
-any credit.
+`schedule-costs` posts the last seven days per resource and service every
+day, because Azure revises a day for about three. So a day is posted by
+several runs, and the latest run wins: the KQL keeps each UsageDate's rows
+from the run that posted it last (one `TimeGenerated` per run) and sums them
+per resource and service. Not `arg_max` per key: a run that no longer has a
+row for a key (it fell to zero) would leave the older run's row standing,
+and rows from before `ResourceId` was sent would double the newer ones.
+`column_ifexists` keeps the query working before azure-container-apps adds
+the column. Figures are ActualCost, before any credit.
 
 **Areas are fixed groups of resource groups**, so each keeps its colour
 whatever the month's ranking. A new resource group falls into "landing zone
@@ -43,9 +47,16 @@ AREA_ORDER = ("platform", "apps", "market-agent", "aks", OTHER)
 SERVICE_SERIES = 5
 REST = "everything else"
 
-KQL = """Costs_CL
-| summarize arg_max(TimeGenerated, Cost, Currency) by UsageDate, ResourceGroup, ServiceName
-| project UsageDate, ResourceGroup, ServiceName, Cost, Currency"""
+KQL = """let runs = Costs_CL | summarize Run = max(TimeGenerated) by UsageDate;
+Costs_CL
+| join kind=inner runs on UsageDate
+| where TimeGenerated == Run
+| extend ResourceId = column_ifexists("ResourceId", "")
+| summarize Cost = sum(Cost) by UsageDate, ResourceGroup, ServiceName, ResourceId, Currency
+| project UsageDate, ResourceGroup, ServiceName, ResourceId, Cost, Currency"""
+
+# Rows from before the feed sent a resource: the group and service only.
+UNATTRIBUTED = "(not broken down)"
 
 SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€"}
 
@@ -93,10 +104,16 @@ class Cost:
     service: str
     cost: float
     currency: str
+    resource_id: str = ""
 
     @property
     def area(self) -> str:
         return area(self.resource_group)
+
+    @property
+    def resource(self) -> str:
+        """The resource's name: its ID's last segment."""
+        return self.resource_id.rstrip("/").rsplit("/", 1)[-1] or UNATTRIBUTED
 
 
 def parse(rows: list[Row]) -> list[Cost]:
@@ -116,6 +133,7 @@ def parse(rows: list[Row]) -> list[Cost]:
                 service=str(row.get("ServiceName") or "(none)"),
                 cost=float(value),
                 currency=str(row.get("Currency") or ""),
+                resource_id=str(row.get("ResourceId") or "").lower(),
             )
         )
     return costs
@@ -151,6 +169,7 @@ class View:
     left_out: int
     groups: list[Bar]
     services: list[Bar]
+    resources: list[Bar]
     areas: list[Bar]
     charts: dict[str, Any] = field(default_factory=dict)
 
@@ -217,10 +236,16 @@ def build(
     by_group: dict[str, float] = defaultdict(float)
     by_service: dict[str, float] = defaultdict(float)
     by_area_totals: dict[str, float] = defaultdict(float)
+    # Keyed by ID, labelled by name: names are unique only within a group.
+    by_resource: dict[str, float] = defaultdict(float)
+    names: dict[str, str] = {}
     for c in in_range:
         by_group[c.resource_group] += c.cost
         by_service[c.service] += c.cost
         by_area_totals[c.area] += c.cost
+        key = c.resource_id or f"{c.resource_group}/"
+        by_resource[key] += c.cost
+        names[key] = f"{c.resource} · {c.resource_group}"
 
     return View(
         days=days,
@@ -244,6 +269,10 @@ def build(
         left_out=left_out,
         groups=_bars(by_group, colour=_group_colour if by_area else None),
         services=_bars(by_service, limit=8),
+        resources=[
+            Bar(b.label if b.label == REST else names[b.label], b.value, b.width)
+            for b in _bars(by_resource, limit=12)
+        ],
         areas=_bars(by_area_totals, colour=_area_colour),
         charts=_charts(costs, in_range, end, days, by_area),
     )
@@ -297,7 +326,7 @@ def _bars(
     ranked = sorted(totals.items(), key=lambda kv: -kv[1])
     if limit and len(ranked) > limit:
         rest = sum(v for _, v in ranked[limit - 1 :])
-        ranked = [*ranked[: limit - 1], ("everything else", rest)]
+        ranked = [*ranked[: limit - 1], (REST, rest)]
     top = max((v for _, v in ranked), default=0.0)
     return [
         Bar(
@@ -334,13 +363,15 @@ def _treemap(
     key: Callable[[Cost], str],
     nested: bool = True,
 ) -> list[dict[str, Any]]:
-    """Over the range: `key` (an area) > resource group > service, or, not
-    nested, resource group > service."""
-    tree: dict[str, dict[str, dict[str, float]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(float))
-    )
+    """Over the range: `key` (an area) > resource group > resource >
+    service, or, not nested, resource group > resource > service."""
+    # Resources keyed by ID (names are unique only per type), labelled by name.
+    Tree = dict[str, dict[str, dict[str, dict[str, float]]]]
+    tree: Tree = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))))
+    names: dict[str, str] = {}
     for c in in_range:
-        tree[key(c)][c.resource_group][c.service] += c.cost
+        tree[key(c)][c.resource_group][c.resource_id][c.service] += c.cost
+        names[c.resource_id] = c.resource
 
     def services(totals: dict[str, float]) -> list[dict[str, Any]]:
         return [
@@ -349,13 +380,23 @@ def _treemap(
             if v > 0
         ]
 
+    def resources(group: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
+        nodes = [
+            {"name": names[rid], "children": services(svcs)}
+            for rid, svcs in sorted(group.items(), key=lambda kv: -sum(kv[1].values()))
+        ]
+        return [n for n in nodes if n["children"]]
+
     nodes = []
     for top in order:
         if top not in tree:
             continue
         groups = [
-            {"name": rg, "children": services(svcs)}
-            for rg, svcs in sorted(tree[top].items(), key=lambda kv: -sum(kv[1].values()))
+            {"name": rg, "children": resources(res)}
+            for rg, res in sorted(
+                tree[top].items(),
+                key=lambda kv: -sum(v for svcs in kv[1].values() for v in svcs.values()),
+            )
         ]
         groups = [g for g in groups if g["children"]]
         if not nested:
