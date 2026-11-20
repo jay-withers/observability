@@ -6,6 +6,15 @@
 // change of the OS theme redraws with the other set.
 (function () {
   "use strict";
+  // The pinned section links sit below the header where it is pinned too
+  // (app.css), so they need its height, which wraps differently per width.
+  var header = document.querySelector("header.top");
+  function headerHeight() {
+    if (header) document.documentElement.style.setProperty("--header-h", header.offsetHeight + "px");
+  }
+  headerHeight();
+  window.addEventListener("resize", headerHeight);
+
   var source = document.getElementById("chart-data");
   if (!source || typeof echarts === "undefined") return;
   var payload = JSON.parse(source.textContent);
@@ -251,6 +260,7 @@
             { itemStyle: { borderWidth: 0, gapWidth: 3 } },
             { colorSaturation: [0.35, 0.6], itemStyle: { gapWidth: 2, borderColorSaturation: 0.5 } },
             { colorSaturation: [0.35, 0.5], itemStyle: { gapWidth: 1 } },
+            { colorSaturation: [0.3, 0.5], itemStyle: { gapWidth: 1 } },
           ],
         }],
       });

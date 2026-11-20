@@ -246,6 +246,26 @@ a.app-link:hover, a.app-link:focus-visible { box-shadow: 0 0 0 2px var(--ink-2);
 .app .name a { color: inherit; }
 .crumb { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
 .crumb a { color: var(--ink-2); }
-nav.jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+/* The section links stay pinned while the page scrolls, so another section
+   is one tap away from anywhere. One row (it scrolls sideways if it must),
+   unlike the header, which wraps on a phone and isn't pinned. */
+nav.jump {
+  position: sticky; top: env(safe-area-inset-top); z-index: 4;
+  display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px;
+  margin: 0 -16px 8px; padding: 8px 16px;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  scrollbar-width: none;
+}
+nav.jump a { flex: none; }
+/* A jumped-to heading lands below the pinned links, not under them. */
+.section-title[id] { scroll-margin-top: calc(56px + env(safe-area-inset-top)); }
+/* Where the header is pinned too, the links sit just below it. app.js sets
+   --header-h from the header's real height; the fallback is one line's. */
+@media (min-width: 720px) {
+  nav.jump { top: var(--header-h, 58px); }
+  .section-title[id] { scroll-margin-top: calc(var(--header-h, 58px) + 56px); }
+}
 nav.jump a { font-size: 13px; padding: 4px 10px; border-radius: 999px; color: var(--ink-2); text-decoration: none; box-shadow: 0 0 0 1px var(--ring); }
 code.sample { font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }

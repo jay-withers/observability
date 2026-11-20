@@ -9,7 +9,7 @@ costs=("$ROOT/scripts/check-costs.sh" sub-123 https://run.example/1)
 costs_page() {
   jq -cn --argjson rows "$1" --arg next "${2:-}" '{properties: {
     nextLink: (if $next == "" then null else $next end),
-    columns: [{name: "Cost"}, {name: "UsageDate"}, {name: "ResourceGroupName"},
+    columns: [{name: "Cost"}, {name: "UsageDate"}, {name: "ResourceId"},
               {name: "ServiceName"}, {name: "Currency"}],
     rows: $rows}}'
 }
@@ -32,6 +32,7 @@ while ((\$#)); do
   case "\$1" in
     -D) : >"\$2"; for h in "\${r[@]:2}"; do printf '%s\r\n' "\${h/=/: }" >>"\$2"; done; shift ;;
     -o) cat "\${r[1]}" >"\$2"; shift ;;
+    --data) echo "\$2" >"$tmp/body"; shift ;;
     https://*) echo "\$1" >>"$tmp/urls" ;;
   esac
   shift
@@ -54,26 +55,29 @@ test_costs_usage() {
 
 test_costs_maps_rows_and_drops_zero() {
   costs_page '[
-    [1.5, 20261101, "RG-Finances-Dev", "Container Apps", "GBP"],
-    [0, 20261101, "rg-gymlog-dev", "Storage", "GBP"],
+    [1.5, 20261101, "/subscriptions/s/resourceGroups/RG-Finances-Dev/providers/Microsoft.App/containerApps/CA-Finances-Dev", "Container Apps", "GBP"],
+    [0, 20261101, "/subscriptions/s/resourcegroups/rg-gymlog-dev/providers/Microsoft.Storage/storageAccounts/st", "Storage", "GBP"],
     [0.25, 20261102, "", "Bandwidth", "GBP"]]' >"$tmp/page.json"
   stub_responses "200 $tmp/page.json"
 
   run "${costs[@]}"
   assert_eq "$status" 0 status
   assert_eq "$(field length)" 2 "row count (the zero row dropped)"
-  assert_eq "$(field '.[0].ResourceGroup')" rg-finances-dev "resource group, lower-cased"
+  assert_eq "$(field '.[0].ResourceGroup')" rg-finances-dev "resource group, from the ID, lower-cased"
+  assert_eq "$(field '.[0].ResourceId')" /subscriptions/s/resourcegroups/rg-finances-dev/providers/microsoft.app/containerapps/ca-finances-dev "ResourceId, lower-cased"
+  assert_eq "$(jq -c '.dataset.grouping | map(.name)' "$tmp/body")" '["ResourceId","ServiceName"]' "grouped by resource and service (two at most)"
   assert_eq "$(field '.[0].UsageDate')" 2026-11-01T00:00:00Z "UsageDate"
   assert_eq "$(field '.[0].ServiceName')" "Container Apps" ServiceName
   assert_eq "$(field '.[0].Cost')" 1.5 Cost
   assert_eq "$(field '.[0].Currency')" GBP Currency
   assert_eq "$(field '.[0].RunUrl')" https://run.example/1 RunUrl
   assert_eq "$(field '.[1].ResourceGroup')" "(none)" "subscription-level charge"
+  assert_eq "$(field '.[1].ResourceId')" "" "no resource"
 }
 
 test_costs_follows_next_link() {
-  costs_page '[[1, 20261101, "rg-a", "S", "GBP"]]' "https://management.azure.com/next?page=2" >"$tmp/page1.json"
-  costs_page '[[2, 20261102, "rg-b", "S", "GBP"]]' >"$tmp/page2.json"
+  costs_page '[[1, 20261101, "/subscriptions/s/resourcegroups/rg-a/providers/p/t/x", "S", "GBP"]]' "https://management.azure.com/next?page=2" >"$tmp/page1.json"
+  costs_page '[[2, 20261102, "/subscriptions/s/resourcegroups/rg-b/providers/p/t/y", "S", "GBP"]]' >"$tmp/page2.json"
   stub_responses "200 $tmp/page1.json" "200 $tmp/page2.json"
 
   run "${costs[@]}"

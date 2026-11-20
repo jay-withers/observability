@@ -41,7 +41,8 @@ class DemoLogs:
             return _failed_runs(now)
         if "ContainerAppConsoleLogs_CL" in first:
             return _console_errors(now, timespan, random.Random(self._seed))
-        if table == "Costs_CL":
+        # The costs query starts with a `let` over the table.
+        if "Costs_CL" in first:
             return _costs(now, timespan, random.Random(self._seed))
         if table != "Deployments_CL":
             return []
@@ -220,18 +221,18 @@ def _failed_runs(now: datetime) -> list[Row]:
 
 
 COST_SHAPE = [
-    ("rg-platform-dev", "Log Analytics", 0.55),
-    ("rg-platform-dev", "Azure Container Apps", 0.20),
-    ("rg-platform-dev", "Storage", 0.04),
-    ("rg-gymlog-dev", "Storage", 0.02),
-    ("rg-gymlog-dev", "Key Vault", 0.01),
-    ("rg-finances-dev", "Azure Database for PostgreSQL", 0.42),
-    ("rg-career-dev", "Storage", 0.02),
-    ("rg-marketagent-dev", "Azure Container Apps", 0.31),
-    ("rg-marketagent-dev", "Storage", 0.05),
-    ("rg-aks-dev", "Azure Kubernetes Service", 0.0),
-    ("rg-hub-dev", "Azure Bastion", 0.0),
-    ("rg-hub-dev", "Virtual Network", 0.03),
+    ("rg-platform-dev", "Log Analytics", "log-platform-dev", 0.55),
+    ("rg-platform-dev", "Azure Container Apps", "cae-platform-dev", 0.20),
+    ("rg-platform-dev", "Storage", "stplatformdev", 0.04),
+    ("rg-gymlog-dev", "Storage", "stgymlogdev", 0.02),
+    ("rg-gymlog-dev", "Key Vault", "kv-gymlog-dev", 0.01),
+    ("rg-finances-dev", "Azure Database for PostgreSQL", "psql-finances-dev", 0.42),
+    ("rg-career-dev", "Storage", "stcareerdev", 0.02),
+    ("rg-marketagent-dev", "Azure Container Apps", "ca-marketagent-dev", 0.31),
+    ("rg-marketagent-dev", "Storage", "stmarketagentdev", 0.05),
+    ("rg-aks-dev", "Azure Kubernetes Service", "aks-dev", 0.0),
+    ("rg-hub-dev", "Azure Bastion", "bas-hub-dev", 0.0),
+    ("rg-hub-dev", "Virtual Network", "vnet-hub-dev", 0.03),
 ]
 
 
@@ -241,7 +242,7 @@ def _costs(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
     # The feed lags a day: yesterday is the newest usage date.
     for back in range(1, timespan.days):
         day = today - timedelta(days=back)
-        for rg, service, base in COST_SHAPE:
+        for rg, service, name, base in COST_SHAPE:
             cost = base * rng.uniform(0.8, 1.25)
             if rg == "rg-aks-dev" and back % 9 in (2, 3):
                 cost = rng.uniform(3.5, 5.0)  # a session left the cluster up
@@ -254,6 +255,7 @@ def _costs(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
                     "UsageDate": datetime(day.year, day.month, day.day, tzinfo=UTC),
                     "ResourceGroup": rg,
                     "ServiceName": service,
+                    "ResourceId": f"/subscriptions/demo/resourcegroups/{rg}/providers/demo/{name}",
                     "Cost": round(cost, 4),
                     "Currency": "USD",
                 }

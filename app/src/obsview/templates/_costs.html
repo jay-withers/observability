@@ -51,7 +51,7 @@
 {% if view.charts.treemap %}
 <div class="card" style="margin-top:10px">
   <h2>Where the money went</h2>
-  <p class="sub">{{ span }}. {{ "Area, then resource group" if overall else "Resource group" }}, then service. Tap to zoom in.</p>
+  <p class="sub">{{ span }}. {{ "Area, then resource group" if overall else "Resource group" }}, then resource, then service. Tap to zoom in.</p>
   <div class="chart tall" {% if group %}data-group="{{ group }}" {% endif %}data-chart="treemap" role="img" aria-label="Treemap of the range's spend"></div>
 </div>
 {% endif %}
@@ -90,4 +90,15 @@
       {% else %}<li class="empty">No spend in this range.</li>{% endfor %}
     </ul>
   </div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>By resource</h2>
+  <p class="sub">{{ span }}. Spend the feed has no resource for (days before it sent one, or until the table has the column) shows as "(not broken down)".</p>
+  <ul class="hbars">
+    {% for b in view.resources %}
+    <li><div class="hbar-label"><span>{{ b.label }}</span><span class="num">{{ money(b.value) }}</span></div>
+      <div class="hbar-track"><i style="width: {{ b.width }}%; background: var(--series-1)"></i></div></li>
+    {% else %}<li class="empty">No spend in this range.</li>{% endfor %}
+  </ul>
 </div>
