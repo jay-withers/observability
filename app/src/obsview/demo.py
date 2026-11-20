@@ -37,6 +37,11 @@ class DemoLogs:
             return _ops(now, timespan, random.Random(self._seed))
         # The Container Apps tables are read through a fuzzy union, so the
         # first word is `union`; the table is named later on the line.
+        if "ContainerAppHTTPLogs" in first:
+            return _http(now, timespan, random.Random(self._seed))
+        # The job-runs query reads the same table as failed runs.
+        if "ContainerAppSystemLogs_CL" in first and "SuccessfulCreate" in kql:
+            return _job_runs(now, timespan, random.Random(self._seed))
         if "ContainerAppSystemLogs_CL" in first:
             return _failed_runs(now)
         if "ContainerAppConsoleLogs_CL" in first:
@@ -293,4 +298,70 @@ def _console_errors(now: datetime, timespan: timedelta, rng: random.Random) -> l
                     }
                 )
     rows.sort(key=lambda r: r["TimeGenerated"], reverse=True)
+    return rows
+
+
+# Workloads with ingress, their requests an hour at most, and their hourly
+# chance of a 5xx and of a slow request. Finances had a bad evening four
+# days ago (its availability budget is at risk), market-agent's api is slow
+# (latency budget spent), and the rest are healthy.
+WEB = [
+    ("ca-gymlog-dev", 40, 0.002, 0.02),
+    ("ca-finances-dev", 25, 0.001, 0.02),
+    ("ca-career-dev", 10, 0.0, 0.03),
+    ("ca-marketagent-dev-api", 30, 0.001, 0.09),
+    ("ca-marketagent-dev-dashboard", 15, 0.0, 0.03),
+    ("ca-observability-dev", 12, 0.0, 0.03),
+]
+
+
+def _http(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
+    rows: list[Row] = []
+    top = now.replace(minute=0, second=0, microsecond=0)
+    for back in range(int(timespan.total_seconds() // 3600), -1, -1):
+        hour = top - timedelta(hours=back)
+        for workload, most, error_rate, slow_rate in WEB:
+            total = rng.randint(0, most)
+            if not total:
+                continue
+            errors = sum(rng.random() < error_rate for _ in range(total))
+            if workload == "ca-finances-dev" and 4 * 24 - 3 <= back <= 4 * 24:
+                errors = total // 2  # the bad evening
+            slow = sum(rng.random() < slow_rate for _ in range(total))
+            rows.append(
+                {
+                    "Hour": hour,
+                    "Workload": workload,
+                    "Total": total,
+                    "Errors": errors,
+                    "Timed": total,
+                    "Fast": total - slow,
+                }
+            )
+    return rows
+
+
+def _job_runs(now: datetime, timespan: timedelta, rng: random.Random) -> list[Row]:
+    """A run of every job a day; the scanner failing its last two, as in
+    the heartbeats and failed runs, and the Garmin sync the odd time."""
+    rows: list[Row] = []
+    for back in range(max(1, timespan.days) - 1, -1, -1):
+        for n, job in enumerate(JOBS):
+            started = (now - timedelta(days=back)).replace(
+                hour=2 + n % 6, minute=0, second=0, microsecond=0
+            )
+            if started > now:
+                continue
+            failed = (job == "caj-sectest-dev-zap" and back < 2) or (
+                job == "caj-gymlog-dev-garmin" and rng.random() < 0.04
+            )
+            rows.append(
+                {
+                    "Job": job,
+                    "Execution": f"{job}-{rng.getrandbits(24):06x}",
+                    "Started": started,
+                    "Completed": 0 if failed else 1,
+                    "Failed": 1 if failed else 0,
+                }
+            )
     return rows

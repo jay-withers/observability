@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import apps, costs, deployments, errors, ops
+from .. import apps, costs, deployments, errors, ops, slo
 from ..logs import CachedLogs, LogsSource, QueryFailed, Row
 from ..settings import settings
 from . import deps
@@ -31,6 +31,8 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.globals["ago"] = deployments.fmt_ago
 templates.env.globals["duration"] = deployments.fmt_duration
 templates.env.globals["js_time"] = deployments.js_time
+templates.env.globals["ratio"] = slo.fmt_ratio
+templates.env.globals["budget"] = slo.fmt_budget
 
 # The ranges on offer. Anything else in `?days=` falls back to the default
 # rather than erroring: it is a bookmark, not an API.
@@ -77,9 +79,10 @@ def source() -> LogsSource:
 
 
 def warm() -> None:
-    """Fill the cache for the home page and /apps at the default range (the
-    same queries), so the first open after a start is fast."""
-    for key, result in _gather(_index_queries(DEFAULT_RANGE, datetime.now(UTC))).items():
+    """Fill the cache for the home page, /apps and /slo at the default range
+    (the home page reads all of their queries), so the first open after a
+    start is fast."""
+    for key, result in _gather(_home_queries(DEFAULT_RANGE, datetime.now(UTC))).items():
         if isinstance(result, QueryFailed):
             logger.warning("cache warm-up of %s failed; the first page load will retry", key)
 
@@ -89,6 +92,7 @@ def _context(request: Request, page: str, days: int, **extra: Any) -> dict[str, 
         "page": page,
         "days": days,
         "ranges": RANGES,
+        "show_range": True,
         "demo": settings().use_demo,
         "environment": settings().environment,
         "app_slugs": [a.slug for a in apps.APPS],
@@ -154,12 +158,12 @@ class _Headline:
 def home(request: Request, days: str = Query(default="")) -> Any:
     """A tile per page, each with its headline: the apps' deploys, problems
     and errors, the platform's, and the month's spend against the budget.
-    The apps index's queries, so they share its cache and the warm-up. Every
-    query is optional here: a failed one leaves its figures "unavailable",
-    and each tile still opens its page."""
+    The apps index's and /slo's queries, so they share their cache and the
+    warm-up. Every query is optional here: a failed one leaves its figures
+    "unavailable", and each tile still opens its page."""
     span = _range(days)
     now = datetime.now(UTC)
-    got = _gather(_index_queries(span, now))
+    got = _gather(_home_queries(span, now))
     deploy_rows = _ok(got["deploys"], "deploys")
     ops_rows, error_rows = _ok(got["ops"], "ops"), _ok(got["errors"], "errors")
     cost_rows = _ok(got["costs"], "costs")
@@ -207,6 +211,8 @@ def home(request: Request, days: str = Query(default="")) -> Any:
             apps_now=_Headline(app_problems, app_errors),
             platform_now=_Headline(platform_problems, platform_errors),
             cview=cview,
+            slo_tally=slo.tally(_slo_reports(got, now)),
+            slo_window=slo.WINDOW_DAYS,
         ),
     )
 
@@ -295,6 +301,33 @@ def _index_queries(span: int, now: datetime) -> dict[str, tuple[str, timedelta]]
     specs = _app_queries(span, now)
     del specs["failed"]
     return specs
+
+
+def _slo_queries() -> dict[str, tuple[str, timedelta]]:
+    """The SLO pages' own queries, over the fixed SLO window whatever the
+    range. Deploys come from the pages' deploy query, whose window is never
+    shorter than 28 days (`deployments.window`)."""
+    return {"http": (slo.HTTP_KQL, slo.WINDOW), "jobs": (slo.JOBS_KQL, slo.WINDOW)}
+
+
+def _home_queries(span: int, now: datetime) -> dict[str, tuple[str, timedelta]]:
+    return {**_index_queries(span, now), **_slo_queries()}
+
+
+def _slo_reports(
+    got: dict[str, list[Row] | QueryFailed],
+    now: datetime,
+    which: tuple[apps.App, ...] = apps.APPS,
+) -> list[slo.Report]:
+    """Every app's SLO report from the `deploys`, `http` and `jobs` results.
+    Each query is optional: a failed one makes the SLIs it feeds read
+    "unavailable" rather than failing the page."""
+    deploy_rows, http_rows = _ok(got["deploys"], "deploys"), _ok(got["http"], "http-logs")
+    job_rows = _ok(got["jobs"], "job-runs")
+    deploys = None if deploy_rows is None else deployments.parse(deploy_rows)
+    hours = None if http_rows is None else slo.parse_http(http_rows)
+    runs = None if job_rows is None else slo.parse_jobs(job_rows)
+    return [apps.slo_report(a, hours, runs, deploys, now) for a in which]
 
 
 def _cost_end(all_costs: list[costs.Cost], now: datetime) -> date:
@@ -497,4 +530,62 @@ def overall_page(request: Request, days: str = Query(default="")) -> Any:
     }
     return templates.TemplateResponse(
         request, "overall.html", _context(request, "overall", span, cview=view, payload=payload)
+    )
+
+
+# --- SLOs ---------------------------------------------------------------------
+
+
+def _slo_got(span: int) -> dict[str, list[Row] | QueryFailed]:
+    """The SLO queries, with the deploy query at the page's range so it
+    shares the cache with the other pages."""
+    env = settings().environment
+    return _gather({"deploys": (deployments.kql(env), deployments.window(span)), **_slo_queries()})
+
+
+@router.get("/slo", response_class=HTMLResponse, include_in_schema=False)
+def slo_page(request: Request, days: str = Query(default="")) -> Any:
+    """A tile per app: its worst SLO status and the budget it has least of.
+    The window is fixed, so the range only carries through the links."""
+    span = _range(days)
+    now = datetime.now(UTC)
+    reports = _slo_reports(_slo_got(span), now)
+    return templates.TemplateResponse(
+        request,
+        "slo.html",
+        _context(
+            request,
+            "slo",
+            span,
+            show_range=False,
+            reports=reports,
+            objectives=slo.OBJECTIVES,
+            window_days=slo.WINDOW_DAYS,
+        ),
+    )
+
+
+@router.get("/slo/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def slo_app_page(request: Request, slug: str, days: str = Query(default="")) -> Any:
+    """One app's SLIs in full: each against its target, its error budget,
+    burn rates and the budget's burn-down over the window."""
+    app = apps.find(slug)
+    if app is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such app")
+    span = _range(days)
+    now = datetime.now(UTC)
+    (report,) = _slo_reports(_slo_got(span), now, (app,))
+    return templates.TemplateResponse(
+        request,
+        "slo_app.html",
+        _context(
+            request,
+            "slo",
+            span,
+            show_range=False,
+            app=app,
+            report=report,
+            window_days=slo.WINDOW_DAYS,
+            payload={"groups": {"slo": report.charts}, "now": deployments.js_time(now)},
+        ),
     )

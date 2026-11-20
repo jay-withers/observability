@@ -105,7 +105,7 @@ def test_home_is_a_tile_per_page(client: TestClient, monkeypatch: pytest.MonkeyP
     response = client.get("/?days=30")
     assert response.status_code == 200
     tiles = re.findall(r'<a class="card nav-tile" href="([^"]+)"', response.text)
-    assert tiles == ["/apps?days=30", "/platform?days=30", "/overall?days=30"]
+    assert tiles == ["/apps?days=30", "/slo?days=30", "/platform?days=30", "/overall?days=30"]
     assert "spent in" in response.text
     assert "unavailable" not in response.text
 
@@ -162,7 +162,7 @@ def test_home_splits_problems_and_errors_between_apps_and_the_platform(
     use(monkeypatch, Rows())
     sign_in(client)
     text = client.get("/").text
-    apps_tile, platform_tile, _ = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)
+    apps_tile, _, platform_tile, _ = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)
     assert "2 problems" in apps_tile
     assert '<div class="value">2</div>' in apps_tile
     assert "4 error lines" in apps_tile
@@ -179,7 +179,7 @@ def test_home_counts_a_quiet_always_reporting_check_as_a_platform_problem(
     use(monkeypatch, Recording())
     sign_in(client)
     text = client.get("/").text
-    platform_tile = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)[1]
+    platform_tile = re.findall(r'<a class="card nav-tile".*?</a>', text, re.S)[2]
     # Session resources and the cost feed, as on /platform.
     assert '<div class="value">2</div>' in platform_tile
 
@@ -191,7 +191,7 @@ def test_home_with_no_budget_says_so_rather_than_over_budget(
     settings.cache_clear()
     use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
-    overall_tile = re.findall(r'<a class="card nav-tile".*?</a>', client.get("/").text, re.S)[2]
+    overall_tile = re.findall(r'<a class="card nav-tile".*?</a>', client.get("/").text, re.S)[3]
     assert "budget</span>" not in overall_tile
     assert "No budget set" in overall_tile
 
@@ -203,9 +203,11 @@ def test_home_renders_around_every_query_failing(
     sign_in(client)
     response = client.get("/")
     assert response.status_code == 200
-    for what in ("Deploys", "Checks", "Costs"):
+    for what in ("Deploys", "Checks", "Costs", "SLOs"):
         assert f"{what} unavailable" in response.text
-    assert len(re.findall(r'class="card nav-tile"', response.text)) == 3
+    # Regression: the SLO tile said "partly unavailable" over "SLOs unavailable".
+    assert "partly unavailable" not in response.text
+    assert len(re.findall(r'class="card nav-tile"', response.text)) == 4
 
 
 def test_home_reads_the_warmed_queries(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,7 +221,7 @@ def test_home_reads_the_warmed_queries(client: TestClient, monkeypatch: pytest.M
     use(monkeypatch, Spy())
     sign_in(client)
     assert client.get("/").status_code == 200
-    warmed = routes._index_queries(routes.DEFAULT_RANGE, datetime.now(UTC))
+    warmed = routes._home_queries(routes.DEFAULT_RANGE, datetime.now(UTC))
     assert sorted(k for k, _ in seen) == sorted(k for k, _ in warmed.values())
 
 
@@ -239,14 +241,19 @@ def test_the_old_views_redirect(client: TestClient, old: str, new: str) -> None:
     assert response.headers["location"] == new
 
 
-def test_the_nav_is_apps_platform_and_overall(
+def test_the_nav_is_apps_slos_platform_and_overall(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use(monkeypatch, Recording())
     sign_in(client)
     nav = re.search(r'<nav class="tabs".*?</nav>', client.get("/apps").text, re.S)
     assert nav
-    assert re.findall(r'href="(/[a-z]+)\?', nav.group(0)) == ["/apps", "/platform", "/overall"]
+    assert re.findall(r'href="(/[a-z]+)\?', nav.group(0)) == [
+        "/apps",
+        "/slo",
+        "/platform",
+        "/overall",
+    ]
 
 
 def test_unknown_range_falls_back_to_the_default(
@@ -490,7 +497,7 @@ def test_warm_up_fills_the_default_pages_queries(monkeypatch: pytest.MonkeyPatch
     use(monkeypatch, Spy())
     routes.warm()
     assert routes.ready_query() in seen
-    assert len(seen) == len(routes._index_queries(routes.DEFAULT_RANGE, datetime.now(UTC)))
+    assert len(seen) == len(routes._home_queries(routes.DEFAULT_RANGE, datetime.now(UTC)))
 
 
 def test_platform_renders_around_every_query_failing(
@@ -766,3 +773,164 @@ def test_section_links_are_on_the_page_they_jump_within(
     assert nav
     for target in re.findall(r'href="#([a-z]+)"', nav.group(0)):
         assert f'id="{target}"' in text
+
+
+# --- SLOs -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/slo", "/slo/gym-log"])
+def test_slo_pages_need_a_session(client: TestClient, path: str) -> None:
+    response = client.get(path, follow_redirects=False)
+    assert response.status_code in (303, 307)
+
+
+def test_slo_index_is_a_tile_per_app_linking_to_its_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from obsview import apps
+
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    response = client.get("/slo?days=30")
+    assert response.status_code == 200
+    tiles = re.findall(r'<a class="card nav-tile" href="([^"]+)"', response.text)
+    assert tiles == [f"/slo/{a.slug}?days=30" for a in apps.APPS]
+    assert "budget left" in response.text
+    # The window is fixed, so no range to pick.
+    assert 'class="range"' not in response.text
+
+
+def test_slo_index_leaves_request_slis_off_job_only_apps(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    text = client.get("/slo").text
+    tile = re.search(r'href="/slo/repo-agent.*?</a>', text, re.S)
+    assert tile
+    assert "Job runs" in tile.group(0)
+    assert "Availability" not in tile.group(0)
+
+
+@pytest.mark.parametrize("slug", ["gym-log", "repo-agent", "observability"])
+def test_slo_app_page_renders_each_sli_with_a_burndown(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, slug: str
+) -> None:
+    from obsview import slo
+
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    response = client.get(f"/slo/{slug}?days=7")
+    assert response.status_code == 200
+    assert f'href="/apps/{slug}?days=7"' in response.text
+    payload = json.loads(
+        re.search(r'id="chart-data">(.*?)</script>', response.text, re.S).group(1)  # type: ignore[union-attr]
+    )
+    burndown = payload["groups"]["slo"]["burndown"]
+    assert burndown
+    for key, chart in burndown.items():
+        assert f'data-key="{key}"' in response.text
+        assert len(chart["points"]) == slo.WINDOW_DAYS
+
+
+def test_slo_app_page_says_when_an_sli_has_no_events(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    response = client.get("/slo/gym-log")
+    assert response.status_code == 200
+    assert "No requests in the last 28 days" in response.text
+    assert "No runs in the last 28 days" in response.text
+    # Nothing to draw, so no charts loaded.
+    assert "echarts" not in response.text
+
+
+def test_slo_pages_render_around_every_query_failing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Failing())
+    sign_in(client)
+    index = client.get("/slo")
+    assert index.status_code == 200
+    assert "SLIs unavailable" in index.text
+    page = client.get("/slo/finances")
+    assert page.status_code == 200
+    assert page.text.count("Couldn't read this SLI") == 4
+
+
+def test_unknown_app_slo_page_is_404(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    assert client.get("/slo/nope").status_code == 404
+
+
+def test_slo_pages_share_the_deploy_query_with_the_other_pages(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from obsview import slo
+
+    seen: list[tuple[str, timedelta]] = []
+
+    class Spy:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            seen.append((kql, timespan))
+            return []
+
+    use(monkeypatch, Spy())
+    sign_in(client)
+    client.get("/slo?days=30")
+    assert (deployments.kql(settings().environment), deployments.window(30)) in seen
+    assert (slo.HTTP_KQL, slo.WINDOW) in seen
+    assert (slo.JOBS_KQL, slo.WINDOW) in seen
+
+
+def test_app_page_links_to_its_slo_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    assert 'href="/slo/career?days=7"' in client.get("/apps/career").text
+
+
+def test_home_slo_tile_counts_apps_within_budget(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = datetime.now(UTC)
+
+    class OnlyDeploys:
+        def query(self, kql: str, timespan: timedelta) -> list[Row]:
+            if not kql.startswith("Deployments_CL"):
+                return []
+            # gym-log: every deploy fails (budget spent); finances: all good.
+            return [
+                {
+                    "TimeGenerated": now - timedelta(hours=h),
+                    "Repo": repo,
+                    "App": repo,
+                    "Outcome": outcome,
+                    "Trigger": "merge",
+                }
+                for h in range(1, 4)
+                for repo, outcome in (("gym-log", "failed"), ("finances", "success"))
+            ]
+
+    use(monkeypatch, OnlyDeploys())
+    sign_in(client)
+    text = client.get("/").text
+    tile = re.search(r'<a class="card nav-tile" href="/slo\?days=7".*?</a>', text, re.S)
+    assert tile
+    assert "1 spent" in tile.group(0)
+    assert re.search(r'<div class="value">1<small class="of"> of 2</small>', tile.group(0))
+
+
+def test_home_slo_tile_with_no_events_says_so_not_0_of_0(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Recording())
+    sign_in(client)
+    text = client.get("/").text
+    tile = re.search(r'<a class="card nav-tile" href="/slo\?days=7".*?</a>', text, re.S)
+    assert tile
+    assert "No SLO events in 28 days" in tile.group(0)
+    assert " of 0" not in tile.group(0)

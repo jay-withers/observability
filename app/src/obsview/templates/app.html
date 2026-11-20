@@ -4,7 +4,7 @@
 {% block body %}
 <p class="crumb"><a href="/apps?days={{ days }}">Apps</a> ›</p>
 <h1>{{ app.title }}</h1>
-<p class="lede"><code>{{ app.slug }}</code>: its deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}.</p>
+<p class="lede"><code>{{ app.slug }}</code>: its deploys, checks, spend and errors over the last {{ days }} day{{ "s" if days != 1 }}. Its SLOs are on <a href="/slo/{{ app.slug }}?days={{ days }}">its SLO page</a>.</p>
 <nav class="jump" aria-label="Sections">
   <a href="#deployments">Deployments</a><a href="#ops">Jobs &amp; ops</a><a href="#costs">Costs</a><a href="#errors">Errors</a>
 </nav>

@@ -266,6 +266,42 @@
       });
     },
 
+    // One SLI's error budget left per day (charts.burndown[key]): a line
+    // that falls as bad events spend it, with zero marked, since spent is
+    // where it stops being a budget.
+    burndown: function (el) {
+      var series = (charts.burndown || {})[el.getAttribute("data-key")];
+      if (!series) return null;
+      var pts = series.points;
+      var good = token("--series-1");
+      var floor = Math.min(0, Math.min.apply(null, pts.map(function (p) { return p[1] === null ? 0 : p[1]; })));
+      return merge(base(), {
+        grid: { left: 40, right: 8, top: 10, bottom: 24 },
+        tooltip: merge(base().tooltip, {
+          trigger: "axis",
+          formatter: function (ps) {
+            var p = pts[ps[0].dataIndex];
+            return escapeHtml(shortDate(p[0])) + "<br>" + (p[1] === null ? "–" : p[1].toFixed(0) + "% of the budget left") +
+              "<br>" + p[2] + " bad of " + p[3];
+          },
+        }),
+        xAxis: merge(axisStyle(), { type: "category", data: pts.map(function (p) { return shortDate(p[0]); }), splitLine: { show: false } }),
+        yAxis: merge(axisStyle(), {
+          type: "value", max: 100, min: Math.floor(floor / 25) * 25,
+          axisLabel: merge(axisStyle().axisLabel, { formatter: "{value}%" }),
+        }),
+        series: [{
+          name: series.title, type: "line", data: pts.map(function (p) { return p[1]; }),
+          showSymbol: false, step: "end", lineStyle: { color: good, width: 2 }, itemStyle: { color: good },
+          areaStyle: { color: good, opacity: 0.12 },
+          markLine: {
+            silent: true, symbol: "none", label: { show: false },
+            lineStyle: { color: token("--status-critical"), type: "dashed" },
+            data: [{ yAxis: 0 }],
+          },
+        }],
+      });
+    },
     lead: function () {
       return merge(base(), {
         grid: { left: 28, right: 8, top: 8, bottom: 24 },
@@ -289,8 +325,10 @@
       if (!data) return;
       var build = buildersFor(data)[el.getAttribute("data-chart")];
       if (!build) return;
+      var option = build(el);
+      if (!option) return;
       var chart = echarts.init(el, null, { renderer: "svg" });
-      chart.setOption(build(el));
+      chart.setOption(option);
       instances.push(chart);
     });
   }
