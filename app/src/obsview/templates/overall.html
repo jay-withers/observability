@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Overall · Observability{% endblock %}
+{% block body %}
+<h1>Overall</h1>
+<p class="lede">The whole subscription's costs over the last {{ days }} day{{ "s" if days != 1 }}: every app and the platform together, against the month's budget.</p>
+<p class="sub">Every resource group, actual cost before any credit, from <code>Costs_CL</code>{% if cview.data_through %}, through {{ cview.data_through.strftime("%-d %b") }}{% endif %}.{% if cview.left_out %} {{ cview.left_out }} row{{ "s" if cview.left_out != 1 }} in another currency left out.{% endif %}</p>
+{% with view = cview, group = "costs", overall = true %}
+{% include "_costs.html" %}
+{% endwith %}
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="chart-data">{{ payload | tojson }}</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+{% endblock %}

@@ -8,6 +8,7 @@ import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -109,8 +110,8 @@ def test_root_redirects_to_apps(client: TestClient) -> None:
     [
         ("/deployments?days=7", "/apps?days=7"),
         ("/ops?days=90", "/platform?days=90"),
-        ("/costs", "/platform?days=30"),
-        ("/costs?days=junk", "/platform?days=30"),
+        ("/costs", "/overall?days=30"),
+        ("/costs?days=junk", "/overall?days=30"),
     ],
 )
 def test_the_old_views_redirect(client: TestClient, old: str, new: str) -> None:
@@ -120,12 +121,14 @@ def test_the_old_views_redirect(client: TestClient, old: str, new: str) -> None:
     assert response.headers["location"] == new
 
 
-def test_the_nav_is_apps_and_platform(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_nav_is_apps_platform_and_overall(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     use(monkeypatch, Recording())
     sign_in(client)
     nav = re.search(r'<nav class="tabs".*?</nav>', client.get("/apps").text, re.S)
     assert nav
-    assert re.findall(r'href="(/[a-z]+)\?', nav.group(0)) == ["/apps", "/platform"]
+    assert re.findall(r'href="(/[a-z]+)\?', nav.group(0)) == ["/apps", "/platform", "/overall"]
 
 
 def test_unknown_range_falls_back_to_the_default(
@@ -224,18 +227,20 @@ def test_platform_shows_only_what_no_app_owns(
     assert "gym-log/terraform" not in text
     assert "caj-gymlog-dev-backup" not in text
     assert "rg-finances-dev" not in text
-    # The budget is the subscription's: its card is here, not on app pages.
-    assert "whole subscription" in text
-    assert "whole subscription" not in client.get("/apps/gym-log").text
+    # The budget is the subscription's: its card is on Overall only.
+    assert "Forecast to month end" not in text
+    assert "Forecast to month end" not in client.get("/apps/gym-log").text
+    assert "Forecast to month end" in client.get("/overall").text
 
 
-def test_platform_budget_counts_every_resource_group(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def two_groups(monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime.now(UTC)
     rows = [
-        {"UsageDate": now, "ResourceGroup": rg, "ServiceName": "s", "Cost": cost, "Currency": "USD"}
-        for rg, cost in (("rg-platform-dev", 3.0), ("rg-gymlog-dev", 4.0))
+        {"UsageDate": now, "ResourceGroup": rg, "ServiceName": svc, "Cost": cost, "Currency": "USD"}
+        for rg, svc, cost in (
+            ("rg-platform-dev", "Log Analytics", 3.0),
+            ("rg-gymlog-dev", "Gym compute", 4.0),
+        )
     ]
 
     class Costs:
@@ -243,10 +248,76 @@ def test_platform_budget_counts_every_resource_group(
             return rows if kql.startswith("Costs_CL") else []
 
     use(monkeypatch, Costs())
+
+
+def chart_payload(text: str) -> Any:
+    found = re.search(r'id="chart-data">(.*?)</script>', text, re.S)
+    assert found
+    return json.loads(found.group(1))
+
+
+@pytest.mark.parametrize(
+    ("path", "own", "other"),
+    [
+        ("/platform?days=1", ("Log Analytics", "$3.00"), ("Gym compute", "$7.00", "$4.00")),
+        ("/apps/gym-log?days=1", ("Gym compute", "$4.00"), ("Log Analytics", "$7.00", "$3.00")),
+    ],
+)
+def test_a_slices_costs_show_only_its_own_spend(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    own: tuple[str, ...],
+    other: tuple[str, ...],
+) -> None:
+    two_groups(monkeypatch)
     sign_in(client)
-    text = client.get("/platform?days=1").text
+    text = client.get(path).text
+    for s in own:
+        assert s in text
+    for s in other:
+        assert s not in text
+    charts = chart_payload(text)["groups"]["costs"]
+    # Stacked by the slice's own services, never the estate's areas.
+    assert charts["series_keys"] == [own[0]]
+    assert "platform" not in charts["series_keys"] and "apps" not in charts["series_keys"]
+
+
+def test_overall_breaks_down_every_resource_group(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    two_groups(monkeypatch)
+    sign_in(client)
+    response = client.get("/overall?days=1")
+    assert response.status_code == 200
+    text = response.text
     assert '<div class="hero-number">$7.00</div>' in text
-    assert '<div class="value">$3.00</div>' in text
+    assert '<div class="value">$7.00</div>' in text
+    for s in ("By area", "rg-platform-dev", "rg-gymlog-dev", "Log Analytics", "Gym compute"):
+        assert s in text
+    charts = chart_payload(text)["groups"]["costs"]
+    assert charts["series_keys"][:2] == ["platform", "apps"]
+    assert [n["name"] for n in charts["treemap"]] == ["platform", "apps"]
+
+
+def test_overall_renders_demo_data(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
+    sign_in(client)
+    response = client.get("/overall?days=30")
+    assert response.status_code == 200
+    assert 'data-group="costs" data-chart="treemap"' in response.text
+
+
+def test_overall_query_failure_is_a_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use(monkeypatch, Failing())
+    sign_in(client)
+    assert client.get("/overall").status_code == 502
+
+
+def test_overall_needs_a_session(client: TestClient) -> None:
+    assert client.get("/overall", follow_redirects=False).status_code in (303, 307)
 
 
 def test_platform_renders_with_no_rows(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

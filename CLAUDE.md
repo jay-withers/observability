@@ -139,21 +139,25 @@ and workspace resolved by name, never by remote state.
   event tables keep 90 days (azure-container-apps), so the delta never shows
   on 60d or 90d, and console logs keep the workspace's 30, so errors reach
   back 30 days at most.
-- **The pages are Apps and Platform**, the estate's rows sliced by
-  `apps.APPS`. `/apps` has a card per app and every app's deploys together;
+- **The pages are Apps, Platform and Overall**, the estate's rows sliced by
+  `apps.APPS`, plus the whole subscription's costs. `/apps` has a card per app and every app's deploys together;
   `/apps/<slug>` is one app; `/platform` is the complement, whatever no app
   owns (`apps.platform_*`). All use the same builders over filtered rows, the
   same queries and windows (`routes._app_queries`, so they share the cache),
   and the same templates (`_deployments.html`, `_ops.html`, `_costs.html`,
   `_errors.html`, with `per_app` hiding the ops count tiles and the "By app"
-  links, and `data-group` keying each chart's data). The budget card is the
-  whole subscription's month, so `/platform` builds it from every group's
-  rows (`budget_view`), not the platform's. A new app is a row in
+  links, and `data-group` keying each chart's data). An app's or the platform's
+  costs are its own rows only, built with `by_area=False`: the daily chart
+  stacks its top services and the treemap starts at its resource groups, so
+  nothing names another area. The budget card, the area stacking and the
+  by-area bars are the whole subscription's, on `/overall` alone
+  (`overall_page`, `overall` in `_costs.html`), which reads the same costs
+  query and range end as the other pages. A new app is a row in
   `apps.APPS`; its `prefix` is the repo's `project_name`, which names its
   resource group and Container Apps workloads. Until then its rows show on
   Platform. Only the deploy query is required on the app pages; on Platform
   none is, and each failure renders a "couldn't read" card. The old
-  `/deployments`, `/ops` and `/costs` redirect (303, not 301: browsers keep
+  `/deployments`, `/ops` and `/costs` (to `/overall`) redirect (303, not 301: browsers keep
   a permanent redirect for good). The session and cost-feed checks write a
   row every run, so Platform counts "no row in 48 hours" as a problem
   (`routes._ALWAYS_REPORT`) rather than leaving their section out.

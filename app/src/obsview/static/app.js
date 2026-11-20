@@ -211,7 +211,7 @@
         }),
         xAxis: merge(axisStyle(), { type: "category", boundaryGap: false, data: s.dates.map(shortDate), splitLine: { show: false } }),
         yAxis: merge(axisStyle(), { type: "value", axisLabel: { color: token("--muted"), fontSize: 11, formatter: symbol + "{value}" } }),
-        series: charts.areas.map(function (a, i) {
+        series: charts.series_keys.map(function (a, i) {
           var colour = token("--series-" + (i + 1));
           return {
             name: a, type: "line", stack: "spend", symbol: "none", smooth: 0.2,
@@ -227,9 +227,11 @@
 
     treemap: function () {
       var symbol = payload.symbol || "";
-      var data = charts.treemap.map(function (node) {
-        var i = charts.areas.indexOf(node.name);
-        return merge(node, { itemStyle: { color: token("--series-" + (i + 1)) } });
+      // The estate's top level is its areas, coloured as the daily chart's;
+      // a slice's is its resource groups, coloured in turn.
+      var data = charts.treemap.map(function (node, n) {
+        var i = charts.by_area ? charts.series_keys.indexOf(node.name) : n;
+        return merge(node, { itemStyle: { color: token("--series-" + ((i % 5) + 1)) } });
       });
       return merge(base(), {
         tooltip: merge(base().tooltip, {
@@ -239,7 +241,7 @@
           },
         }),
         series: [{
-          type: "treemap", name: "All areas", data: data, roam: false, nodeClick: "zoomToNode",
+          type: "treemap", name: "All", data: data, roam: false, nodeClick: "zoomToNode",
           top: 0, left: 0, right: 0, bottom: 28, leafDepth: 2,
           breadcrumb: { bottom: 0, itemStyle: { color: token("--grid"), borderColor: token("--grid"), textStyle: { color: token("--ink") } } },
           label: { fontSize: 12, color: "#fff", overflow: "truncate" },
