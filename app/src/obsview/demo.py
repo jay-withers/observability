@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from .logs import Row
 
 APPS = [
-    ("gym-log", "gymlog"),
+    ("health", "health"),
     ("finances", "finances"),
     ("career", "career"),
     ("observability", "obsview"),
@@ -109,7 +109,7 @@ ROOTS = [
     "azure-container-apps/terraform",
     "cloudflare/terraform",
     "github-repos/terraform",
-    "gym-log/terraform",
+    "health/terraform",
     "finances/terraform",
     "career/terraform",
     "market-agent/terraform",

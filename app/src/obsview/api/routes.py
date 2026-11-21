@@ -173,7 +173,9 @@ def home(request: Request, days: str = Query(default="")) -> Any:
         since = deployments.range_start(span, now)
         slugs = {a.slug for a in apps.APPS}
         # The apps' tiles' sum: a deploy of a repo no longer in APPS is on no tile.
-        deploys = [d for d in deployments.parse(deploy_rows) if d.when >= since and d.repo in slugs]
+        deploys = [
+            d for d in apps.parse_deploys(deploy_rows) if d.when >= since and d.repo in slugs
+        ]
 
     app_problems = platform_problems = None
     if ops_rows is not None:
@@ -324,7 +326,7 @@ def _slo_reports(
     "unavailable" rather than failing the page."""
     deploy_rows, http_rows = _ok(got["deploys"], "deploys"), _ok(got["http"], "http-logs")
     job_rows = _ok(got["jobs"], "job-runs")
-    deploys = None if deploy_rows is None else deployments.parse(deploy_rows)
+    deploys = None if deploy_rows is None else apps.parse_deploys(deploy_rows)
     hours = None if http_rows is None else slo.parse_http(http_rows)
     runs = None if job_rows is None else slo.parse_jobs(job_rows)
     return [apps.slo_report(a, hours, runs, deploys, now) for a in which]
@@ -355,7 +357,7 @@ def apps_page(request: Request, days: str = Query(default="")) -> Any:
     got = _gather(_index_queries(span, now))
     if isinstance(got["deploys"], QueryFailed):
         return _failed(request, "apps", span, got["deploys"])
-    deploys = deployments.parse(got["deploys"])
+    deploys = apps.parse_deploys(got["deploys"])
     ops_rows = _ok(got["ops"], "ops")
     cost_rows = _ok(got["costs"], "costs")
     error_rows = _ok(got["errors"], "errors")
@@ -449,17 +451,29 @@ def _panels(
     }
 
 
+def _to_slug(request: Request, page: str, app: apps.App) -> RedirectResponse:
+    """A former name (`apps.App.former`) to the app's own URL, query kept.
+    303, as the old pages' redirects are: a browser keeps a 301 for good."""
+    query = request.url.query
+    return RedirectResponse(
+        f"{page}/{app.slug}" + (f"?{query}" if query else ""),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 @router.get("/apps/{slug}", response_class=HTMLResponse, include_in_schema=False)
 def app_page(request: Request, slug: str, days: str = Query(default="")) -> Any:
     app = apps.find(slug)
     if app is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such app")
+    if slug != app.slug:
+        return _to_slug(request, "/apps", app)
     span = _range(days)
     now = datetime.now(UTC)
     got = _gather(_app_queries(span, now))
     if isinstance(got["deploys"], QueryFailed):
         return _failed(request, "apps", span, got["deploys"])
-    dview = deployments.build(apps.deploys_for(app, deployments.parse(got["deploys"])), span, now)
+    dview = deployments.build(apps.deploys_for(app, apps.parse_deploys(got["deploys"])), span, now)
     pick = _Slice(
         events=lambda es: apps.events_for(app, es),
         runs=lambda rs: apps.failed_runs_for(app, rs),
@@ -572,6 +586,8 @@ def slo_app_page(request: Request, slug: str, days: str = Query(default="")) -> 
     app = apps.find(slug)
     if app is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such app")
+    if slug != app.slug:
+        return _to_slug(request, "/slo", app)
     span = _range(days)
     now = datetime.now(UTC)
     (report,) = _slo_reports(_slo_got(span), now, (app,))

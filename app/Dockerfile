@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
-# The same two-stage shape as gym-log, from jay-withers/dev-containers. Keep the
+# The same two-stage shape as health, from jay-withers/dev-containers. Keep the
 # two at the same version: python-app-builder is built FROM python-app, and a
 # virtualenv is bound to the minor Python that created it (market-agent's
 # "No module named" outage). Build for linux/amd64; `make build` does.

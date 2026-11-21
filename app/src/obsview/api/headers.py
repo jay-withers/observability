@@ -1,6 +1,6 @@
 """Security headers on every response.
 
-Copied verbatim between career, finances and gym-log. Re-copy rather than
+Copied verbatim between career, finances and health. Re-copy rather than
 diverge, as for `settings.py`. The nightly passive DAST scan in
 jay-withers/security-testing reports each of these when it is missing.
 

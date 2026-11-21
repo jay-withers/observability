@@ -139,7 +139,7 @@ def test_ratios_are_truncated_never_rounded_up_to_100(ratio: float | None, text:
 
 
 def test_an_apps_report_is_its_own_rows_and_worst_status() -> None:
-    gym, agent = apps.find("gym-log"), apps.find("repo-agent")
+    gym, agent = apps.find("health"), apps.find("repo-agent")
     assert gym is not None and agent is not None
     hours = [
         slo.HttpHour(NOW, "ca-gymlog-dev", 100, 0, 100, 100),
@@ -160,7 +160,7 @@ def test_an_apps_report_is_its_own_rows_and_worst_status() -> None:
 
 
 def test_a_failed_query_reads_unavailable_not_ok() -> None:
-    gym = apps.find("gym-log")
+    gym = apps.find("health")
     assert gym is not None
     report = apps.slo_report(gym, None, [], [], NOW)
     assert report.status == "unavailable"

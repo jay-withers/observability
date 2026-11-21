@@ -131,7 +131,7 @@ def test_home_splits_problems_and_errors_between_apps_and_the_platform(
     ops_rows = [
         {"TimeGenerated": now, "Kind": k, "Name": n, "Status": s, "Detail": ""}
         for k, n, s in (
-            ("heartbeat", "caj-gymlog-dev-backup", "overdue"),  # gym-log's
+            ("heartbeat", "caj-gymlog-dev-backup", "overdue"),  # health's
             ("drift", "finances/terraform", "drifted"),  # finances'
             ("drift", "azure-landingzone/hub", "drifted"),  # the platform's
             ("session", "vm", "ok"),
@@ -141,7 +141,7 @@ def test_home_splits_problems_and_errors_between_apps_and_the_platform(
     deploy_rows = [
         {"TimeGenerated": now, "Repo": r, "Outcome": "success"}
         # The last is a repo no longer in apps.APPS: on no app's tile, so not in the sum.
-        for r in ("gym-log", "finances", "retired-app")
+        for r in ("health", "finances", "retired-app")
     ]
     error_rows = [
         {"Workload": "ca-gymlog-dev", "Total": 4, "TimeGenerated": now, "Log_s": "ERROR x"},
@@ -349,12 +349,12 @@ def test_platform_shows_only_what_no_app_owns(
     assert "azure-landingzone/hub" in text
     assert "Session resources" in text
     assert "rg-platform-dev" in text
-    assert "gym-log/terraform" not in text
+    assert "health/terraform" not in text
     assert "caj-gymlog-dev-backup" not in text
     assert "rg-finances-dev" not in text
     # The budget is the subscription's: its card is on Overall only.
     assert "Forecast to month end" not in text
-    assert "Forecast to month end" not in client.get("/apps/gym-log").text
+    assert "Forecast to month end" not in client.get("/apps/health").text
     assert "Forecast to month end" in client.get("/overall").text
 
 
@@ -385,7 +385,7 @@ def chart_payload(text: str) -> Any:
     ("path", "own", "other"),
     [
         ("/platform?days=1", ("Log Analytics", "$3.00"), ("Gym compute", "$7.00", "$4.00")),
-        ("/apps/gym-log?days=1", ("Gym compute", "$4.00"), ("Log Analytics", "$7.00", "$3.00")),
+        ("/apps/health?days=1", ("Gym compute", "$4.00"), ("Log Analytics", "$7.00", "$3.00")),
     ],
 )
 def test_a_slices_costs_show_only_its_own_spend(
@@ -463,7 +463,7 @@ def test_platform_says_when_an_always_reporting_check_goes_quiet(
     assert "Session resources <small>no row</small>" in text
     assert "Cost feed <small>no row</small>" in text
     # An app page has no such checks, so it says nothing about them.
-    assert "no row" not in client.get("/apps/gym-log").text
+    assert "no row" not in client.get("/apps/health").text
 
 
 def test_platform_with_both_checks_reporting_is_all_clear(
@@ -599,7 +599,7 @@ def test_readyz_passes_on_explicit_demo(monkeypatch: pytest.MonkeyPatch) -> None
 # --- apps and the platform ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/apps", "/apps/gym-log"])
+@pytest.mark.parametrize("path", ["/apps", "/apps/health"])
 def test_app_pages_need_a_session(client: TestClient, path: str) -> None:
     response = client.get(path, follow_redirects=False)
     assert response.status_code in (303, 307)
@@ -619,7 +619,7 @@ def test_apps_index_lists_every_app_with_demo_data(
     assert "error line" in response.text
 
 
-@pytest.mark.parametrize("slug", ["gym-log", "finances", "market-agent", "career"])
+@pytest.mark.parametrize("slug", ["health", "finances", "market-agent", "career"])
 def test_app_page_renders_every_section_with_demo_data(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, slug: str
 ) -> None:
@@ -644,11 +644,23 @@ def test_app_page_shows_only_that_apps_rows(
 ) -> None:
     use(monkeypatch, DemoLogs(now=datetime.now(UTC)))
     sign_in(client)
-    text = client.get("/apps/gym-log").text
+    text = client.get("/apps/health").text
     assert "caj-gymlog-dev-backup" in text
     assert "caj-finances-dev-backup" not in text
     assert "rg-platform-dev" not in text
     assert "GET /sessions/N → 500" in text
+
+
+@pytest.mark.parametrize("page", ["apps", "slo"])
+def test_an_apps_former_name_redirects_to_its_page(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, page: str
+) -> None:
+    """A bookmark from before health was renamed from gym-log."""
+    use(monkeypatch, Recording())
+    sign_in(client)
+    response = client.get(f"/{page}/gym-log?days=30", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/{page}/health?days=30"
 
 
 def test_unknown_app_is_404(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -678,7 +690,7 @@ def test_app_pages_render_around_failed_secondary_queries(
 ) -> None:
     use(monkeypatch, OnlyDeploysAnswer())
     sign_in(client)
-    response = client.get("/apps/gym-log")
+    response = client.get("/apps/health")
     assert response.status_code == 200
     assert "Couldn't read the console logs" in response.text
     assert "Couldn't read the checks" in response.text
@@ -693,7 +705,7 @@ def test_app_page_deploy_failure_is_a_page(
 ) -> None:
     use(monkeypatch, Failing())
     sign_in(client)
-    assert client.get("/apps/gym-log").status_code == 502
+    assert client.get("/apps/health").status_code == 502
     assert client.get("/apps").status_code == 502
 
 
@@ -717,7 +729,7 @@ def test_deployment_app_cards_link_to_the_app_page(
     sign_in(client)
     text = client.get("/apps").text
     deploys = text[text.index('id="deployments"') :]
-    assert 'href="/apps/gym-log?days=7"' in deploys
+    assert 'href="/apps/health?days=7"' in deploys
 
 
 class FailedRunsOnlyBroken:
@@ -762,7 +774,7 @@ def test_the_default_range_is_seven_days(
     assert re.search(r'<a href="\?days=7" aria-current="true">7d</a>', text)
 
 
-@pytest.mark.parametrize("path", ["/apps/gym-log", "/platform"])
+@pytest.mark.parametrize("path", ["/apps/health", "/platform"])
 def test_section_links_are_on_the_page_they_jump_within(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
 ) -> None:
@@ -778,7 +790,7 @@ def test_section_links_are_on_the_page_they_jump_within(
 # --- SLOs -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/slo", "/slo/gym-log"])
+@pytest.mark.parametrize("path", ["/slo", "/slo/health"])
 def test_slo_pages_need_a_session(client: TestClient, path: str) -> None:
     response = client.get(path, follow_redirects=False)
     assert response.status_code in (303, 307)
@@ -812,7 +824,7 @@ def test_slo_index_leaves_request_slis_off_job_only_apps(
     assert "Availability" not in tile.group(0)
 
 
-@pytest.mark.parametrize("slug", ["gym-log", "repo-agent", "observability"])
+@pytest.mark.parametrize("slug", ["health", "repo-agent", "observability"])
 def test_slo_app_page_renders_each_sli_with_a_burndown(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, slug: str
 ) -> None:
@@ -838,7 +850,7 @@ def test_slo_app_page_says_when_an_sli_has_no_events(
 ) -> None:
     use(monkeypatch, Recording())
     sign_in(client)
-    response = client.get("/slo/gym-log")
+    response = client.get("/slo/health")
     assert response.status_code == 200
     assert "No requests in the last 28 days" in response.text
     assert "No runs in the last 28 days" in response.text
@@ -902,7 +914,7 @@ def test_home_slo_tile_counts_apps_within_budget(
         def query(self, kql: str, timespan: timedelta) -> list[Row]:
             if not kql.startswith("Deployments_CL"):
                 return []
-            # gym-log: every deploy fails (budget spent); finances: all good.
+            # health: every deploy fails (budget spent); finances: all good.
             return [
                 {
                     "TimeGenerated": now - timedelta(hours=h),
@@ -912,7 +924,7 @@ def test_home_slo_tile_counts_apps_within_budget(
                     "Trigger": "merge",
                 }
                 for h in range(1, 4)
-                for repo, outcome in (("gym-log", "failed"), ("finances", "success"))
+                for repo, outcome in (("health", "failed"), ("finances", "success"))
             ]
 
     use(monkeypatch, OnlyDeploys())

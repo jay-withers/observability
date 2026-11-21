@@ -60,7 +60,7 @@ How it works:
   build time with a pinned SHA-256 (`app/Dockerfile`), because the file is
   over the repo's 500 KB limit and a CDN would need the CSP opened to it.
   Tiles and sparklines are plain HTML and SVG, drawn server-side.
-- **A passcode gate**, the same signed-cookie scheme as gym-log, from
+- **A passcode gate**, the same signed-cookie scheme as health, from
   `APP_PASSCODE`.
 
 Run it locally with `make app-run` (add `PORT=` if 8000 is taken). With no
@@ -157,7 +157,7 @@ In order, once:
 
 obsview is served at `observability.jaywithers.uk` (`custom_domain_name` in
 `environments/dev.tfvars`) with a free Azure-managed certificate, the same
-way finances, gym-log and career are. Its CNAME and `asuid` TXT records are
+way finances, health and career are. Its CNAME and `asuid` TXT records are
 the `observability` entry in [jay-withers/cloudflare](https://github.com/jay-withers/cloudflare)'s `app_domains`, **DNS
 only**, never proxied, or certificate validation fails (`make dns` prints
 what they should be). Both must resolve before the apply.

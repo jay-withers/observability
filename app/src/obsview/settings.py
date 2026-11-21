@@ -1,6 +1,6 @@
 """Configuration.
 
-Shaped like gym-log's `settings.py`, minus its Key Vault resolution: this
+Shaped like health's `settings.py`, minus its Key Vault resolution: this
 repo has no Key Vault by decision (CLAUDE.md), so the one secret, the
 passcode, reaches the container as a Container Apps secret in `APP_PASSCODE`,
 and locally from the environment or `.env`.
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # The gate defaults on, so forgetting to configure it fails closed.
     require_passcode: bool = True
     # Signs the session cookie. Unset means it is derived from the passcode,
-    # so a deploy or a new replica does not log anyone out (as gym-log).
+    # so a deploy or a new replica does not log anyone out (as health).
     cookie_secret: str = ""
     cookie_max_age_seconds: int = 60 * 60 * 24 * 30
 

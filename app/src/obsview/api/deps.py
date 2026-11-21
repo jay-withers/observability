@@ -1,6 +1,6 @@
 """The passcode gate.
 
-Adapted from gym-log's `api/deps.py` (same cookie scheme, same reasoning):
+Adapted from health's `api/deps.py` (same cookie scheme, same reasoning):
 reachable from the public internet, so the gate defaults on and a missing
 passcode fails closed. A shared passcode rather than Entra sign-in, because
 this repo has no app registration by decision. The cookie is signed, not
@@ -38,7 +38,7 @@ def issue() -> str:
 def valid(token: str | None) -> bool:
     # No passcode means nobody is let in, cookie or not. Without this the
     # signing key falls back to sha256(b""), a public constant, and anyone
-    # could forge a session: gym-log's copy has the same hole.
+    # could forge a session: health's copy has the same hole.
     if not passcode():
         return False
     if not token or "." not in token:

@@ -1,7 +1,7 @@
 name: ci-python
 
 # The obsview app's tests, type check and coverage, through the shared
-# python.yml (the same call gym-log makes), run from app/ where its
+# python.yml (the same call health makes), run from app/ where its
 # pyproject.toml and uv.lock live. Not yet a required check: it becomes one
 # in github-repos once it has reported reliably.
 on:

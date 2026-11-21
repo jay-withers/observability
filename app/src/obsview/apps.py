@@ -3,7 +3,9 @@
 Each table names an app its own way, so the tie is explicit here, as
 `costs.AREAS` is for resource groups:
 
-- `Deployments_CL`: `Repo`, the repo name, which is the app's slug.
+- `Deployments_CL`: `Repo`, the repo name, which is the app's slug. Rows
+  from before a rename carry a `former` name, which `parse_deploys` reads as
+  the slug.
 - `OpsEvents_CL`: drift rows name the root, `<repo>/<directory>` (their
   `Repo` is not used: this repo's own checks write theirs as observability);
   heartbeats name the Container Apps job (`caj-<prefix>-dev-<job>`) or the
@@ -12,7 +14,8 @@ Each table names an app its own way, so the tie is explicit here, as
 - Container Apps' own logs: the workload name, `ca-<prefix>-dev` for the
   app and `caj-<prefix>-dev-<job>` for its jobs.
 
-`prefix` is the repo's Terraform `project_name`. Rows that belong to no app
+`prefix` is the repo's Terraform `project_name`, which a repo rename leaves
+alone (health's is still `gymlog`). Rows that belong to no app
 (the landing zone, the shared environment, Cloudflare, AKS, sessions, the
 cost feed) are the platform's: its page is the complement of every app's.
 """
@@ -20,12 +23,13 @@ cost feed) are the platform's: its page is the complement of every app's.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
-from . import slo
+from . import deployments, slo
 from .costs import Cost
 from .deployments import Deploy, rate
+from .logs import Row
 from .ops import Event, FailedRun
 
 
@@ -38,6 +42,16 @@ class App:
     # Has a container app with ingress, so request SLIs apply. The job-only
     # apps run Container Apps jobs and nothing else.
     serves: bool = True
+    # Names the repo had before a rename. Rows written then still carry them:
+    # drift roots would otherwise fall to the platform page, which owns
+    # whatever no app does, and deploys would be a second app. `find`
+    # resolves them too, so an old link still opens.
+    former: tuple[str, ...] = ()
+
+    @property
+    def repos(self) -> tuple[str, ...]:
+        """Every repo name this app's rows can carry: the slug, then `former`."""
+        return (self.slug, *self.former)
 
     @property
     def resource_group(self) -> str:
@@ -50,11 +64,11 @@ class App:
 
     def owns_root(self, root: str) -> bool:
         """A Terraform root (`<repo>/<directory>`) in this app's repo."""
-        return root == self.slug or root.startswith(f"{self.slug}/")
+        return any(root == r or root.startswith(f"{r}/") for r in self.repos)
 
 
 APPS: tuple[App, ...] = (
-    App("gym-log", "Gym log", "gymlog", ("health.jaywithers.uk",)),
+    App("health", "Health", "gymlog", ("health.jaywithers.uk",), former=("gym-log",)),
     App("finances", "Finances", "finances", ("finances.jaywithers.uk",)),
     App("career", "Career", "career"),
     App("market-agent", "Market agent", "marketagent", ("marketagent.jaywithers.uk",)),
@@ -63,14 +77,32 @@ APPS: tuple[App, ...] = (
     App("observability", "Observability", "observability", ("observability.jaywithers.uk",)),
 )
 
-_BY_SLUG = {a.slug: a for a in APPS}
+_BY_SLUG = {r: a for a in APPS for r in a.repos}
+_BY_FORMER = {r: a for a in APPS for r in a.former}
 
 
 def find(slug: str) -> App | None:
     return _BY_SLUG.get(slug)
 
 
+def parse_deploys(rows: list[Row]) -> list[Deploy]:
+    """`deployments.parse`, with a former repo name read as its app's slug.
+
+    The deploy workflow's `App` defaults to the repo name, so that moves too
+    when it was the old name. Otherwise one app's deploys would be two lanes,
+    with two success rates, either side of the rename.
+    """
+    out = []
+    for d in deployments.parse(rows):
+        app = _BY_FORMER.get(d.repo)
+        if app is not None:
+            d = replace(d, repo=app.slug, app=app.slug if d.app in ("", d.repo) else d.app)
+        out.append(d)
+    return out
+
+
 def deploys_for(app: App, deploys: Iterable[Deploy]) -> list[Deploy]:
+    """`deploys` from `parse_deploys`, so a former name already reads as the slug."""
     return [d for d in deploys if d.repo == app.slug]
 
 

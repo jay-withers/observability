@@ -86,7 +86,7 @@ push: ## Push the image to ghcr.io (needs write:packages)
 # A bare `make deploy` is a hard error: the default tag is whatever commit is
 # checked out, which may never have been pushed.
 #
-# **This sets the whole env** (`--replace-env-vars`, where gym-log uses
+# **This sets the whole env** (`--replace-env-vars`, where health uses
 # --set-env-vars), which Terraform ignores:
 # IMAGE_TAG changes every release, so it can't be Terraform's. The rest come
 # from Terraform's outputs, so this is the one place the env is written down.
