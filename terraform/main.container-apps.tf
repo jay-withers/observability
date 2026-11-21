@@ -83,7 +83,7 @@ resource "azurerm_container_app" "this" {
 
   tags = local.tags
 
-  # **`make deploy` owns the image and the env**, as gym-log's does, but with
+  # **`make deploy` owns the image and the env**, as health's does, but with
   # `--replace-env-vars` rather than its `--set-env-vars`: it sets IMAGE_TAG
   # (what /healthz reports and the smoke test checks) alongside every other
   # value obsview reads, taken
@@ -104,7 +104,7 @@ resource "azurerm_container_app" "this" {
 
 # --- the custom domain --------------------------------------------------------
 #
-# The same shape as finances, gym-log and career, which hit and confirmed the
+# The same shape as finances, health and career, which hit and confirmed the
 # provider's gaps first. Both resources are guarded by the same count: a
 # hostname binds to exactly one container app globally.
 #

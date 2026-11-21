@@ -14,11 +14,11 @@ the checks that feed them: `schedule-expiry`, `schedule-heartbeats`,
 why and the first-time setup; this file covers the traps.
 
 **The container app runs obsview** (`app/`, README "obsview"), a FastAPI
-app in gym-log's shape that replaced Grafana. Grafana, its image and the
+app in health's shape that replaced Grafana. Grafana, its image and the
 Grafana Cloud sync were removed after the cutover; a new view goes in obsview.
 
 A tenant of [azure-container-apps](https://github.com/jay-withers/azure-container-apps),
-shaped like gym-log: its own resource group and identity, the environment
+shaped like health: its own resource group and identity, the environment
 and workspace resolved by name, never by remote state.
 
 ## Decisions not to re-litigate
@@ -68,9 +68,9 @@ and workspace resolved by name, never by remote state.
   every plan would propose unbinding it. The DNS records are in
   jay-withers/cloudflare's `app_domains`, and must stay DNS only.
 - **`make deploy` owns the image and the whole env**, and both are under
-  `ignore_changes`. Like gym-log, it sets `IMAGE_TAG` on each deploy, because
+  `ignore_changes`. Like health, it sets `IMAGE_TAG` on each deploy, because
   Terraform can't own a value that changes per release without showing
-  drift on every plan. **Unlike gym-log it uses `--replace-env-vars`**, not
+  drift on every plan. **Unlike health it uses `--replace-env-vars`**, not
   `--set-env-vars`: every variable the app reads is listed there, and
   anything not listed (a portal edit, Terraform's create-time `PORT`) is
   dropped on the next deploy. A new setting goes in the Makefile's `deploy`
@@ -119,7 +119,7 @@ and workspace resolved by name, never by remote state.
   steps. Outcomes use the status colours, triggers a fixed colour per name
   (never by rank). No inline `<script>` that executes: the chart payload is
   a `type="application/json"` block, and `headers.py` (copied verbatim from
-  gym-log, keep it identical) sets the CSP.
+  health, keep it identical) sets the CSP.
 - **No `WORKSPACE_ID` means demo data** (`demo.py`), under a banner, so
   `make app-run` and the route tests need no Azure. A new table a view reads
   needs demo rows there too.
@@ -167,7 +167,12 @@ and workspace resolved by name, never by remote state.
   query and range end as the other pages. A new app is a row in
   `apps.APPS`; its `prefix` is the repo's `project_name`, which names its
   resource group and Container Apps workloads. Until then its rows show on
-  Platform. Only the deploy query is required on the app pages; on Platform
+  Platform. A renamed repo keeps its old name in `former` (health's
+  `gym-log`): rows written before the rename carry it, and without it its
+  drift rows would land on Platform as unowned. Deploy rows go through
+  `apps.parse_deploys`, which reads the old name as the slug so old and new
+  deploys make one lane, and `/apps/<former>` and `/slo/<former>` redirect
+  (303) to the slug. Only the deploy query is required on the app pages; on Platform
   none is, and each failure renders a "couldn't read" card. The old
   `/deployments`, `/ops` and `/costs` (to `/overall`) redirect (303, not 301: browsers keep
   a permanent redirect for good). The session and cost-feed checks write a
@@ -217,7 +222,7 @@ darwin_arm64. Only dev exists.
 
 Every workflow is a thin caller of
 [`jay-withers/workflows`](https://github.com/jay-withers/workflows), pinned by
-SHA with the tag as a comment, the same set gym-log uses:
+SHA with the tag as a comment, the same set health uses:
 
 - `ci-pre-commit` (`pre-commit / Pre-commit`), `ci-codeql`.
 - `ci-terraform`: validate (`terraform / Terraform`), and a dev plan behind the

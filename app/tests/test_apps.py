@@ -6,7 +6,7 @@ from typing import Any
 from obsview import apps, costs, deployments, ops
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
-GYM = apps.find("gym-log")
+GYM = apps.find("health")
 assert GYM is not None
 
 
@@ -43,8 +43,8 @@ def test_one_apps_prefix_never_matches_anothers() -> None:
 
 def test_ops_events_by_root_job_check_and_host() -> None:
     rows = [
-        event("drift", "gym-log/terraform"),
-        event("drift", "gym-log-extra/terraform"),
+        event("drift", "health/terraform"),
+        event("drift", "health-extra/terraform"),
         event("drift", "azure-landingzone/hub"),
         event("heartbeat", "caj-gymlog-dev-backup"),
         event("heartbeat", "caj-finances-dev-backup"),
@@ -57,7 +57,7 @@ def test_ops_events_by_root_job_check_and_host() -> None:
         event("cost-feed", "Costs_CL"),
     ]
     assert names(rows) == [
-        "gym-log/terraform",
+        "health/terraform",
         "caj-gymlog-dev-backup",
         "check: drift gym-log/terraform",
         "health.jaywithers.uk",
@@ -89,9 +89,9 @@ def test_summary_counts_the_range_and_says_when_a_query_failed() -> None:
     assert GYM is not None
     deploys = deployments.parse(
         [
-            {"TimeGenerated": NOW - timedelta(hours=1), "Repo": "gym-log", "Outcome": "success"},
-            {"TimeGenerated": NOW - timedelta(hours=2), "Repo": "gym-log", "Outcome": "failed"},
-            {"TimeGenerated": NOW - timedelta(days=9), "Repo": "gym-log", "Outcome": "success"},
+            {"TimeGenerated": NOW - timedelta(hours=1), "Repo": "health", "Outcome": "success"},
+            {"TimeGenerated": NOW - timedelta(hours=2), "Repo": "health", "Outcome": "failed"},
+            {"TimeGenerated": NOW - timedelta(days=9), "Repo": "health", "Outcome": "success"},
             {"TimeGenerated": NOW, "Repo": "finances", "Outcome": "success"},
         ]
     )
@@ -117,7 +117,7 @@ def test_platform_events_are_those_no_app_owns() -> None:
     rows = [
         event("drift", "azure-landingzone/hub"),
         event("drift", "cloudflare/terraform"),
-        event("drift", "gym-log/terraform"),
+        event("drift", "health/terraform"),
         event("heartbeat", "caj-gymlog-dev-backup"),
         event("heartbeat", "check: drift azure-container-apps/terraform"),
         event("heartbeat", "check: drift finances/terraform"),
@@ -177,3 +177,50 @@ def test_platform_costs_are_the_groups_no_app_owns() -> None:
     ]
     assert GYM is not None
     assert [c.resource_group for c in apps.costs_for(GYM, rows)] == ["rg-gymlog-dev"]
+
+
+def test_a_renamed_repos_rows_stay_with_its_app() -> None:
+    """health was gym-log until 2026-11-21, and rows from before then say so.
+
+    Without `former`, its old drift rows would be unowned, and unowned is the
+    platform's, so they'd show up on the Platform page as someone else's
+    problem.
+    """
+    assert GYM is not None
+    assert apps.find("gym-log") is GYM
+    assert GYM.owns_root("gym-log/terraform")
+    assert not GYM.owns_root("gym-log-extra/terraform")
+    drift = ops.parse([event("drift", "gym-log/terraform", "drifted")])
+    assert apps.platform_events(drift) == []
+
+
+def test_no_apps_former_name_is_anothers() -> None:
+    names = [r for a in apps.APPS for r in a.repos]
+    assert len(names) == len(set(names))
+
+
+def test_a_former_names_deploys_read_as_the_app_so_they_make_one_lane() -> None:
+    """The deploy workflow's `App` defaults to the repo, so old rows say gym-log twice."""
+    assert GYM is not None
+    rows = [
+        {"TimeGenerated": NOW, "Repo": "health", "App": "health", "Outcome": "success"},
+        {
+            "TimeGenerated": NOW - timedelta(days=1),
+            "Repo": "gym-log",
+            "App": "gym-log",
+            "Outcome": "failed",
+        },
+        {"TimeGenerated": NOW - timedelta(days=2), "Repo": "gym-log", "Outcome": "success"},
+        # An App named for something else is kept, as `label` shows it.
+        {
+            "TimeGenerated": NOW - timedelta(days=3),
+            "Repo": "gym-log",
+            "App": "worker",
+            "Outcome": "success",
+        },
+        {"TimeGenerated": NOW, "Repo": "finances", "Outcome": "success"},
+    ]
+    mine = apps.deploys_for(GYM, apps.parse_deploys(rows))
+    assert [d.label for d in mine] == ["health", "health", "health", "health / worker"]
+    view = deployments.build(mine, 7, NOW)
+    assert [a.label for a in view.apps] == ["health", "health / worker"]

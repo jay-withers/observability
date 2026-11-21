@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Phone-first dashboards over the estate's Log Analytics tables"
 requires-python = ">=3.12"
 
-# Server-rendered FastAPI, the same shape as gym-log. The charts are drawn in
+# Server-rendered FastAPI, the same shape as health. The charts are drawn in
 # the browser by ECharts, which the image fetches at build time (see the
 # Dockerfile); nothing here needs a JavaScript build step.
 dependencies = [
@@ -71,6 +71,6 @@ init_typed = true
 testpaths = ["tests"]
 filterwarnings = [
   "error",
-  # Raised inside starlette's own TestClient import (as in gym-log).
+  # Raised inside starlette's own TestClient import (as in health).
   "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
