@@ -4,7 +4,7 @@
 # two at the same version: python-app-builder is built FROM python-app, and a
 # virtualenv is bound to the minor Python that created it (market-agent's
 # "No module named" outage). Build for linux/amd64; `make build` does.
-FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.23.14@sha256:6b885a4bee2828f977de351914a190c5fda4f194ce4a5df989d53e39f0b3d0d3 AS builder
+FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.23.15@sha256:23256068bf3cee10eca9f1fd9ea95a0f49cd36736c4b6680c38ee51307416e7f AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ ADD --checksum=sha256:bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e1
 RUN chmod 0755 /vendor && chmod 0644 /vendor/echarts.min.js
 
 
-FROM ghcr.io/jay-withers/dev-containers/python-app:v0.23.14@sha256:a194f1f419eeefa988125c1b09c728f32dc81a8fa47c017219fd88df9b63e82f
+FROM ghcr.io/jay-withers/dev-containers/python-app:v0.23.15@sha256:9706d49c43d6f16617abe26555abae0f1c5fe7c705109bbf2c3415c3bc7a7883
 
 LABEL org.opencontainers.image.source="https://github.com/jay-withers/observability"
 
