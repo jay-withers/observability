@@ -201,6 +201,13 @@ and workspace resolved by name, never by remote state.
   returns its true total, so one crash loop can't crowd out other apps. App crashes come from the failed
   runs query, which reads apps as well as jobs. Neither KQL is exercised by
   the tests; check it against the workspace.
+- **CSRF is `api/csrf.py`, a byte-for-byte copy of appkit's `csrf.py`**
+  (v0.8.0; obsview doesn't depend on appkit). Re-copy rather than diverge:
+  `diff` against appkit's tag should come back clean. Its middleware refuses
+  cross-site POSTs, and the login form carries its `csrf_token`, which the
+  login route checks before the passcode. A browser with no CSRF cookie
+  at all is told sign-in needs cookies, not that the form expired. Route tests sign in through
+  `login_form()`, which reads the token from `GET /login`.
 - **No Key Vault**: the passcode is the container app secret `passcode`,
   mapped to `APP_PASSCODE` by `make deploy`.
 - **`/readyz` fails without `WORKSPACE_ID`** unless `DEMO=true` is set:

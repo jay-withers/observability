@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from obsview import deployments
-from obsview.api import deps, routes
+from obsview.api import csrf, deps, routes
 from obsview.demo import DemoLogs
 from obsview.logs import QueryFailed, Row
 from obsview.settings import settings
@@ -49,8 +49,13 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     routes._build_source.cache_clear()
 
 
+def login_form(client: TestClient, passcode: str) -> dict[str, str]:
+    """What the login form posts: the passcode and the page's CSRF token."""
+    return {"passcode": passcode, "csrf_token": csrf.token_in(client.get("/login").text)}
+
+
 def sign_in(client: TestClient) -> None:
-    response = client.post("/login", data={"passcode": "sesame"}, follow_redirects=False)
+    response = client.post("/login", data=login_form(client, "sesame"), follow_redirects=False)
     assert response.status_code == 303
 
 
@@ -74,9 +79,51 @@ def test_pages_redirect_to_login_without_a_session(client: TestClient) -> None:
 
 
 def test_wrong_passcode_is_refused(client: TestClient) -> None:
-    response = client.post("/login", data={"passcode": "nope"}, follow_redirects=False)
+    response = client.post("/login", data=login_form(client, "nope"), follow_redirects=False)
     assert response.status_code == 401
     assert "obsview_session" not in response.cookies
+
+
+def test_the_login_form_carries_a_csrf_token(client: TestClient) -> None:
+    page = client.get("/login")
+    assert page.cookies.get(csrf.COOKIE_NAME) == csrf.token_in(page.text)
+
+
+def test_a_login_without_the_csrf_token_is_refused_even_with_the_passcode(
+    client: TestClient,
+) -> None:
+    client.get("/login")
+    response = client.post("/login", data={"passcode": "sesame"}, follow_redirects=False)
+    assert response.status_code == 403
+    assert "expired" in response.text
+    assert "obsview_session" not in response.cookies
+    # The re-render carries a token that works, so a retry signs in.
+    retry = {"passcode": "sesame", "csrf_token": csrf.token_in(response.text)}
+    assert client.post("/login", data=retry, follow_redirects=False).status_code == 303
+
+
+def test_a_browser_that_keeps_no_cookie_is_told_cookies_are_needed(
+    client: TestClient,
+) -> None:
+    token = csrf.token_in(client.get("/login").text)
+    client.cookies.clear()
+    response = client.post(
+        "/login", data={"passcode": "sesame", "csrf_token": token}, follow_redirects=False
+    )
+    assert response.status_code == 403
+    assert "needs cookies" in response.text
+    assert "expired" not in response.text
+
+
+def test_a_cross_site_login_is_refused(client: TestClient) -> None:
+    response = client.post(
+        "/login",
+        data=login_form(client, "sesame"),
+        headers={"Sec-Fetch-Site": "cross-site"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    assert "content-security-policy" in response.headers
 
 
 def test_apps_index_renders_all_apps_deploys_with_chart_payload(
