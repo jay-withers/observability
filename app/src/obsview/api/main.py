@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..logs import QueryFailed
 from ..settings import passcode, settings
-from . import deps, headers, routes
+from . import csrf, deps, headers, routes
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    # Before headers, so a cross-site refusal carries the security headers too.
+    csrf.install(app)
     headers.install(app)
 
     @app.get("/healthz", include_in_schema=False)

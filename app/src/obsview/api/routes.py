@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 from .. import apps, costs, deployments, errors, ops, slo
 from ..logs import CachedLogs, LogsSource, QueryFailed, Row
 from ..settings import settings
-from . import deps
+from . import csrf, deps
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ templates.env.globals["duration"] = deployments.fmt_duration
 templates.env.globals["js_time"] = deployments.js_time
 templates.env.globals["ratio"] = slo.fmt_ratio
 templates.env.globals["budget"] = slo.fmt_budget
+templates.env.globals["csrf_token"] = csrf.token
 
 # The ranges on offer. Anything else in `?days=` falls back to the default
 # rather than erroring: it is a bookmark, not an API.
@@ -109,7 +110,18 @@ def login_form(request: Request) -> Any:
 
 
 @public.post("/login", include_in_schema=False)
-def login(request: Request, passcode: str = Form(default="")) -> Any:
+def login(
+    request: Request, passcode: str = Form(default=""), csrf_token: str = Form(default="")
+) -> Any:
+    # Before the passcode, so a forged post can't even try one. The re-render
+    # carries a fresh token, so a retry works (csrf.py: two tabs, one cookie).
+    if not csrf.valid(request, csrf_token):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": _csrf_refusal(request), "page": "login"},
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
     if not deps.check_passcode(passcode):
         return templates.TemplateResponse(
             request,
@@ -127,6 +139,15 @@ def login(request: Request, passcode: str = Form(default="")) -> Any:
         secure=True,
     )
     return response
+
+
+def _csrf_refusal(request: Request) -> str:
+    """Why the form was refused. No cookie at all means the browser won't keep
+    it (cookies blocked, or plain http on a host other than localhost, where a
+    `Secure` cookie is dropped), and "try again" would fail the same way."""
+    if request.cookies.get(csrf.COOKIE_NAME):
+        return "That form had expired. Try again."
+    return "Signing in needs cookies, over https or on localhost."
 
 
 @public.get("/manifest.json", include_in_schema=False)
