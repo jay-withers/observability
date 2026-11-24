@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    uses: jay-withers/workflows/.github/workflows/python.yml@fa8accd07133582cba854b28f3eeddf7649d9685 # v1.31.6
+    uses: jay-withers/workflows/.github/workflows/python.yml@f748462468ce1fc5b385413fba07e41afc28c1db # v1.32.2
     with:
       working-directory: app
       # The runtime image's Python (dev-containers python-app), not the latest.
