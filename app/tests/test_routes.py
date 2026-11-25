@@ -993,3 +993,45 @@ def test_home_slo_tile_with_no_events_says_so_not_0_of_0(
     assert tile
     assert "No SLO events in 28 days" in tile.group(0)
     assert " of 0" not in tile.group(0)
+
+
+# --- the release in the header ------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["/", "/apps", "/platform", "/overall", "/slo"])
+def test_a_signed_in_page_shows_the_release_beside_the_name(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    monkeypatch.setenv("IMAGE_TAG", "v1.2.3")
+    sign_in(client)
+    page = client.get(path, follow_redirects=False)
+    assert page.status_code == 200
+    assert '<span class="version">v1.2.3</span>' in page.text
+    # Beside the home link, not part of its name.
+    brand = page.text.split('class="brand"', 1)[1].split("</a>", 1)[0]
+    assert "v1.2.3" not in brand
+
+
+def test_the_sign_in_page_never_shows_the_release(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not before the passcode. Not a secret either: /healthz reports it."""
+    monkeypatch.setenv("IMAGE_TAG", "v1.2.3")
+    page = client.get("/login")
+    assert page.status_code == 200
+    assert "v1.2.3" not in page.text
+
+
+@pytest.mark.parametrize("tag", [None, "", "  "])
+def test_no_release_is_shown_when_none_is_deployed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tag: str | None
+) -> None:
+    """A local run has no IMAGE_TAG; it shows nothing rather than a blank tag."""
+    if tag is None:
+        monkeypatch.delenv("IMAGE_TAG", raising=False)
+    else:
+        monkeypatch.setenv("IMAGE_TAG", tag)
+    sign_in(client)
+    page = client.get("/", follow_redirects=False)
+    assert page.status_code == 200
+    assert 'class="version"' not in page.text

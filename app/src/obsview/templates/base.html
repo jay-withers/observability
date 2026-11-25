@@ -16,6 +16,11 @@
 <header class="top">
   <div class="bar">
     <a class="brand" href="/{% if days %}?days={{ days }}{% endif %}">Observability <span class="env">{{ environment }}</span></a>
+    {#- Beside the home link, not inside it, so the link's name is stable. The
+        sign-in page has no header at all (page == "login" above). Not a
+        secret, since /healthz reports the tag to anyone. -#}
+    {% set release = app_version() %}{% if release %}
+    <span class="version">{{ release }}</span>{% endif %}
     <nav class="tabs" aria-label="Views">
       <a href="/apps?days={{ days }}" {% if page == "apps" %}aria-current="page"{% endif %}>Apps</a>
       <a href="/slo?days={{ days }}" {% if page == "slo" %}aria-current="page"{% endif %}>SLOs</a>

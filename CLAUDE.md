@@ -208,6 +208,12 @@ and workspace resolved by name, never by remote state.
   login route checks before the passcode. A browser with no CSRF cookie
   at all is told sign-in needs cookies, not that the form expired. Route tests sign in through
   `login_form()`, which reads the token from `GET /login`.
+- **The release shows beside the name** in the header of every signed-in
+  page: `IMAGE_TAG`, trimmed, through the `app_version` template global,
+  beside (not inside) the home link in `base.html`, and nothing when it is
+  unset or blank. The sign-in page has no header, so it never shows. That is
+  a choice about the page, not a secret, since `/healthz` reports the tag to
+  anyone.
 - **No Key Vault**: the passcode is the container app secret `passcode`,
   mapped to `APP_PASSCODE` by `make deploy`.
 - **`/readyz` fails without `WORKSPACE_ID`** unless `DEMO=true` is set:
