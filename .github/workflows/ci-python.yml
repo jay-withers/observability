@@ -16,8 +16,6 @@ jobs:
     uses: jay-withers/workflows/.github/workflows/python.yml@93bff29fb7e15a3669a1f120ab0c3a2940a413d6 # v1.34.0
     with:
       working-directory: app
-      # The runtime image's Python (dev-containers python-app), not the latest.
-      python-version: "3.14"
       extras: dev
       coverage: obsview
       # Both floors fail the check: the total (coverage-min), so the package
