@@ -244,7 +244,8 @@ SHA with the tag as a comment, the same set health uses:
 - `ci-python`: obsview's pytest, mypy and coverage from `app/` (not yet
   required).
 - `ci-container-build`: builds `app/` (image `obsview`) behind the
-  `container-build` gate.
+  `container-build` gate, and checks its Python is the one `mise.toml` pins
+  (workflows v1.35.0+; `mise.toml` is in its path filter).
 - `cd-tag` → `cd-publish` (when `app/` changed) → `container-apps-deploy`,
   which deploys and smoke-tests `obsview`.
 - `cd-terraform`: plans dev on merge; applies when run by hand.
