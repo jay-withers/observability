@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +30,11 @@ STATIC_DIR = PACKAGE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.globals["ago"] = deployments.fmt_ago
+# The release this revision runs, beside the app's name on every signed-in
+# page: IMAGE_TAG, trimmed, read per render rather than at import. Empty when
+# unset or blank (a local run), which renders nothing where /healthz would
+# say "unknown".
+templates.env.globals["app_version"] = lambda: os.environ.get("IMAGE_TAG", "").strip()
 templates.env.globals["duration"] = deployments.fmt_duration
 templates.env.globals["js_time"] = deployments.js_time
 templates.env.globals["ratio"] = slo.fmt_ratio

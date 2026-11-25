@@ -84,6 +84,10 @@ header.top {
 }
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; max-width: 1200px; margin: 0 auto; }
 .brand { font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; text-decoration: none; }
+/* The release tag beside the name: there to check, not to read. */
+/* Its own item in the bar, which wraps on a phone like the tabs do; the
+   negative margin pulls it back towards the name from the bar's 16px gap. */
+.bar > .version { font-weight: 500; font-size: 12px; color: var(--ink-2); margin-left: -8px; }
 .brand .env { font-weight: 500; font-size: 12px; color: var(--ink-2); border: 1px solid var(--ring); border-radius: 999px; padding: 1px 8px; }
 nav.tabs { display: flex; gap: 4px; }
 nav.tabs a, nav.tabs span {
