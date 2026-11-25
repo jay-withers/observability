@@ -10,17 +10,24 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   test:
-    uses: jay-withers/workflows/.github/workflows/python.yml@f748462468ce1fc5b385413fba07e41afc28c1db # v1.32.2
+    uses: jay-withers/workflows/.github/workflows/python.yml@93bff29fb7e15a3669a1f120ab0c3a2940a413d6 # v1.34.0
     with:
       working-directory: app
       # The runtime image's Python (dev-containers python-app), not the latest.
       python-version: "3.14"
       extras: dev
       coverage: obsview
-      coverage-pr-comment: true
-      diff-coverage: "80"
+      # Both floors fail the check: the total (coverage-min), so the package
+      # can't slip, and the lines a PR changes (diff-coverage), so new code
+      # comes with its tests. A test that only asserts a mock still counts,
+      # so review the tests too. The table is in the job summary; there is
+      # no PR comment.
+      coverage-min: "90"
+      diff-coverage: "90"
       typecheck: mypy
+      # ruff check and ruff format --check, from the locked dev extra, so CI
+      # runs the ruff `make lint` does.
+      lint: true
