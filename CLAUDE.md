@@ -29,8 +29,9 @@ and workspace resolved by name, never by remote state.
   .NET app, chosen because it was the best fit: it uses nothing from appkit,
   has no data of its own, and its one SDK (Azure Monitor Query) is
   first-party in .NET. Every route, query, cookie, header and page carried
-  over, and the 186 Python tests were ported to xunit (273 now). Rolling
-  back is a redeploy of the last Python tag: there is no data to migrate.
+  over, and all 186 Python tests were ported to xunit. Rolling back is a
+  redeploy of v0.24.7, the last Python release: there is no data to
+  migrate.
 - **MVC with Razor views**, not Blazor or Razor Pages: the pages are
   server-rendered HTML over one query each, as the Jinja templates were,
   and `app.js` draws the charts. Tests run on Microsoft.Testing.Platform
@@ -39,7 +40,6 @@ and workspace resolved by name, never by remote state.
   not Python's, so the same shapes (the late scanner, Finances' bad evening,
   market-agent's slow api) with different figures. Nothing reads them but
   screenshots and the route tests, which assert shapes, not figures.
-
 - **The passcode is a container app secret from `random_password`**
   (`make passcode`), never a Key Vault secret: a Terraform-managed vault
   secret needs data-plane access just to plan, which the pipeline identity
