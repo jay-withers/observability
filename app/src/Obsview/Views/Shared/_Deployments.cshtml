@@ -1,0 +1,128 @@
+@model DeploymentsPanel
+@* The deployments panels, shared by the apps index and each app's page. *@
+@{
+    var view = Model.View;
+    var days = Model.Days;
+    string Group() => Model.Group;
+}
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent Badge(string outcome)
+    {
+        var html = new Microsoft.AspNetCore.Html.HtmlContentBuilder();
+        html.AppendHtml("<span class=\"badge o-");
+        html.Append(outcome);
+        html.AppendHtml("\">");
+        html.Append(outcome.Replace('_', ' '));
+        html.AppendHtml("</span>");
+        return html;
+    }
+}
+<section class="tiles" aria-label="Headline figures">
+  @foreach (var k in view.Kpis)
+  {
+  <div class="card tile">
+    <div class="label">@k.Label</div>
+    <div class="value">@k.Value</div>
+    @if (!string.IsNullOrEmpty(k.Delta))
+    {
+    <div class="delta @k.Tone">@k.Delta</div>
+    }
+    @if (k.Spark.Length > 0)
+    {
+    <svg viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true"><path d="@k.Spark" vector-effect="non-scaling-stroke"/></svg>
+    }
+  </div>
+  }
+</section>
+
+@if (view.Total == 0)
+{
+<div class="card" style="margin-top:10px"><p class="empty">No deploys in the last @days day@(Fmt.S(days)).</p></div>
+}
+else
+{
+<div class="grid two">
+  <div class="card">
+    <h2>Outcomes per day</h2>
+    <p class="sub">Stacked by result</p>
+    <ul class="legend">
+      <li><span class="swatch s-success"></span>Success</li>
+      <li><span class="swatch s-untested"></span>Untested</li>
+      <li><span class="swatch s-rolled_back"></span>Rolled back</li>
+      <li><span class="swatch s-failed"></span>Failed</li>
+    </ul>
+    <div class="chart" data-group="@Group()" data-chart="outcomes" role="img" aria-label="Deploys per day, stacked by outcome"></div>
+  </div>
+  <div class="card">
+    <h2>What triggered them</h2>
+    <p class="sub">Share of deploys by trigger</p>
+    <div class="chart" data-group="@Group()" data-chart="triggers" role="img" aria-label="Deploys by trigger"></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>Every deploy, by app</h2>
+  <p class="sub">One dot per deploy; hover or tap for the version</p>
+  <div class="chart" data-group="@Group()" data-chart="timeline" style="height: @(70 + (30 * view.Charts.Timeline.Apps.Count))px"
+       role="img" aria-label="Timeline of deploys per app, coloured by outcome"></div>
+</div>
+
+<div class="grid halves">
+  <div class="card">
+    <h2>Activity</h2>
+    <p class="sub">Deploys per day, last 13 weeks</p>
+    <div class="chart short" data-group="@Group()" data-chart="calendar" role="img" aria-label="Calendar heatmap of deploys per day"></div>
+  </div>
+  <div class="card">
+    <h2>Lead time</h2>
+    <p class="sub">Merge to live, deploys with a recorded lead time</p>
+    <div class="chart short" data-group="@Group()" data-chart="lead" role="img" aria-label="Histogram of lead times"></div>
+  </div>
+</div>
+
+<h2 class="section-title">By app</h2>
+<div class="apps">
+  @foreach (var a in view.Apps)
+  {
+  <div class="card app">
+    <div class="name">@if (!Model.PerApp && Model.AppSlugs.Contains(a.Repo)) {<a href="/apps/@a.Repo?days=@days">@a.Label</a>} else {<span>@a.Label</span>}@Badge(a.Last.Outcome)</div>
+    <div class="meta">@a.Last.Version · @Deployments.FormatAgo(a.Last.When, view.Now)</div>
+    <div class="meta">@a.Deploys deploy@(Fmt.S(a.Deploys)) · @Fmt.Fixed(a.SuccessPct, 0)% ok · lead @a.MedianLead@if (a.RolledBack > 0) {<text> · @a.RolledBack rolled back</text>}@if (a.Failed > 0) {<text> · @a.Failed failed</text>}</div>
+    <div class="bar-track" aria-hidden="true">
+      <i style="width: @(a.SuccessPct)%; background: var(--status-good)"></i>
+      @if (a.RolledBack > 0)
+      {
+      <i style="width: @(100.0 * a.RolledBack / a.Deploys)%; background: var(--status-warning)"></i>
+      }
+      @if (a.Failed > 0)
+      {
+      <i style="width: @(100.0 * a.Failed / a.Deploys)%; background: var(--status-critical)"></i>
+      }
+    </div>
+  </div>
+  }
+</div>
+
+<h2 class="section-title">Recent</h2>
+<div class="card">
+  <ol class="recent">
+    @foreach (var d in view.Recent)
+    {
+    <li>
+      @if (d.RunUrl.Length > 0)
+      {
+      @:<a href="@d.RunUrl" rel="noopener" target="_blank">
+      }
+        <div class="what">@d.Label <small>@d.Version@if (d.PreviousVersion.Length > 0) {<text> ← @d.PreviousVersion</text>}</small></div>
+      @if (d.RunUrl.Length > 0)
+      {
+      @:</a>
+      }
+      <div class="when" title="@Times.IsoStamp(d.When)">@Deployments.FormatAgo(d.When, view.Now)</div>
+      <div class="how">@d.Trigger@if (d.LeadTimeSec is { } lead) {<text> · lead @Deployments.FormatDuration(lead)</text>}@if (d.Commit.Length > 0) {<text> · @d.Commit</text>}</div>
+      <div>@Badge(d.Outcome)</div>
+    </li>
+    }
+  </ol>
+</div>
+}

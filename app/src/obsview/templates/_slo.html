@@ -1,4 +1,0 @@
-{# Shared by the SLO pages. #}
-{% macro slo_badge(status, label) %}<span class="badge {{ {"exhausted": "st-failed", "at-risk": "st-overdue", "ok": "st-ok"}.get(status, "st-removed") }}">{{ label }}</span>{% endmacro %}
-{% macro meter(sli) %}<span class="meter" aria-hidden="true"><i class="{{ {"exhausted": "st-fill-failed", "at-risk": "st-fill-expiring"}.get(sli.status, "st-fill-ok") }}" style="width: {{ [[100 * (sli.budget_left or 0), 0] | max, 100] | min | round(1) }}%"></i></span>{% endmacro %}
-{% macro burn(x) %}{% if x is none %}–{% else %}{{ "%.1f" | format(x) }}×{% endif %}{% endmacro %}

@@ -1,0 +1,11 @@
+@model LoginPage
+<form method="post" action="/login" class="card login">
+  @if (Model.Error.Length > 0)
+  {
+  <p class="error" role="alert">@Model.Error</p>
+  }
+  <input type="hidden" name="csrf_token" value="@Model.CsrfToken">
+  <label for="passcode">Passcode</label>
+  <input type="password" id="passcode" name="passcode" autocomplete="current-password" autofocus>
+  <button type="submit">Sign in</button>
+</form>

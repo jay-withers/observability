@@ -65,10 +65,12 @@ jobs:
       contents: read
       security-events: write # Trivy findings to code scanning
       issues: write # build-failed issue, outside pull requests
-    uses: jay-withers/workflows/.github/workflows/docker.yml@ca86e90ed1f90f0afae1c2f2fc5a20c3a2115287 # v1.35.0
+    uses: jay-withers/workflows/.github/workflows/docker.yml@c09184e4a36bda973662132cf1d80ee50477796e # v1.39.0
     with:
+      # `dotnet` checks the image's .NET runtime has the major.minor of
+      # mise.toml's dotnet SDK, which ci-dotnet tests on (v1.39.0+).
       images: |
-        [{"name": "obsview", "context": "app", "python": "python"}]
+        [{"name": "obsview", "context": "app", "dotnet": "dotnet"}]
       failure-issue: ${{ github.event_name != 'pull_request' }}
 
   # The required status check ("container-build"). Skipped counts as success,

@@ -1,0 +1,141 @@
+@model OpsPanel
+@* The ops panels, shared by the platform and each app's page. *@
+@{
+    var view = Model.View;
+    var days = Model.Days;
+    var n = view.Problems.Count + Model.Silent.Count;
+}
+@functions {
+    private static Microsoft.AspNetCore.Html.IHtmlContent Status(string status)
+    {
+        var html = new Microsoft.AspNetCore.Html.HtmlContentBuilder();
+        html.AppendHtml("<span class=\"badge st-");
+        html.Append(status);
+        html.AppendHtml("\">");
+        html.Append(status);
+        html.AppendHtml("</span>");
+        return html;
+    }
+}
+@if (n > 0)
+{
+<section class="hero bad" aria-label="Problems now">
+  <div class="hero-head"><span class="hero-icon" aria-hidden="true">!</span>
+    <div><div class="hero-title">@n problem@(Fmt.S(n)) now</div>
+    <div class="hero-sub">Latest row per check, last 48 hours</div></div></div>
+  <ul class="problems">
+    @foreach (var e in view.Problems)
+    {
+    <li>
+      <div class="what">@e.Name <small>@e.Kind</small></div>
+      @Status(e.Status)
+      <div class="how">@e.Detail@if (e.RunUrl.Length > 0) {<text> · <a href="@e.RunUrl" rel="noopener" target="_blank">run</a></text>}</div>
+    </li>
+    }
+    @foreach (var title in Model.Silent)
+    {
+    <li>
+      <div class="what">@title <small>no row</small></div>
+      @Status("failed")
+      <div class="how">No row in the last 48 hours: the check itself may have stopped.</div>
+    </li>
+    }
+  </ul>
+</section>
+}
+else
+{
+<section class="hero good" aria-label="Problems now">
+  <div class="hero-head"><span class="hero-icon" aria-hidden="true">✓</span>
+    <div><div class="hero-title">All clear</div>
+    <div class="hero-sub">Every check's latest result is ok</div></div></div>
+</section>
+}
+
+@if (!Model.PerApp)
+{
+<section class="tiles four" aria-label="Counts" style="margin-top:10px">
+  @foreach (var tile in view.Tiles)
+  {
+  <a class="card tile" href="#@tile.Kind">
+    <div class="label">@tile.Label</div>
+    <div class="value @(tile.Count > 0 ? "warn" : "")">@tile.Count</div>
+  </a>
+  }
+</section>
+}
+
+@foreach (var s in view.Sections)
+{
+<div class="card section" id="@s.Kind" style="margin-top:10px">
+  <div class="section-head">
+    <div><h2>@s.Title</h2><p class="sub">@s.Sub</p></div>
+    @if (s.Problems > 0)
+    {
+    <span class="badge st-@s.Worst">@s.Problems to look at</span>
+    }
+    else
+    {
+    <span class="badge st-ok">ok</span>
+    }
+  </div>
+  @if (s.Kind == "expiry" && view.Certificates.Count > 0)
+  {
+  <ul class="gauges">
+    @foreach (var c in view.Certificates)
+    {
+    <li>
+      <div class="gauge-label"><span>@c.Name</span><span class="num">@(c.DaysLeft?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "–") days</span></div>
+      <div class="gauge-track"><i class="st-fill-@c.Status" style="width: @(c.Width)%"></i><b style="left: @(100.0 * 21 / 365)%" title="Warns at 21 days"></b></div>
+    </li>
+    }
+  </ul>
+  }
+  else
+  {
+  <div class="chart grid-chart" data-group="@Model.Group" data-chart="grid" data-key="@s.Kind"
+       style="height: @(46 + (26 * s.Current.Count))px"
+       role="img" aria-label="@s.Title: worst status per day"></div>
+  }
+  <details class="rows" open="@(s.Problems > 0 ? "open" : null)">
+    <summary>@s.Current.Count check@(Fmt.S(s.Current.Count))</summary>
+    <ol class="recent">
+      @foreach (var e in s.Current)
+      {
+      <li>
+        <div class="what">@e.Name</div>
+        <div class="when">@Deployments.FormatAgo(e.When, view.Now)</div>
+        <div class="how">@e.Detail@if (e.RunUrl.Length > 0) {<text> · <a href="@e.RunUrl" rel="noopener" target="_blank">run</a></text>}</div>
+        <div>@Status(e.Status)</div>
+      </li>
+      }
+    </ol>
+  </details>
+</div>
+}
+
+<h2 class="section-title">Failed runs and crashes</h2>
+<div class="card">
+  @if (view.FailedRuns is null)
+  {
+  <p class="empty">Couldn't read the failed runs just now; everything above is current. The app's logs have the detail.</p>
+  }
+  else if (view.FailedRuns.Count > 0)
+  {
+  <ol class="recent">
+    @foreach (var r in view.FailedRuns)
+    {
+    <li>
+      <div class="what">@r.Job <small>@r.Reason</small></div>
+      <div class="when">@Deployments.FormatAgo(r.Last, view.Now)</div>
+      <div class="how">@r.Failures failure@(Fmt.S(r.Failures)) · @r.Sample</div>
+      <div>@Status("failed")</div>
+    </li>
+    }
+  </ol>
+  }
+  else
+  {
+  <p class="empty">No failed job runs or crashed apps in the last @days day@(Fmt.S(days)).</p>
+  }
+</div>

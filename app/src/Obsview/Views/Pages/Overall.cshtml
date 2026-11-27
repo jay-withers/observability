@@ -1,0 +1,6 @@
+@model OverallPage
+@{ var days = Model.Days; var c = Model.Costs; }
+<h1>Overall</h1>
+<p class="lede">The whole subscription's costs over the last @days day@(Fmt.S(days)): every app and the platform together, against the month's budget.</p>
+<p class="sub">Every resource group, actual cost before any credit, from <code>Costs_CL</code>@if (c.DataThrough is { } through) {<text>, through @Times.DayMonth(through)</text>}.@if (c.LeftOut > 0) {<text> @c.LeftOut row@(Fmt.S(c.LeftOut)) in another currency left out.</text>}</p>
+@await Html.PartialAsync("_Costs", new CostsPanel(c, "costs", true))

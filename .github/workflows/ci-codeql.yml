@@ -33,4 +33,6 @@ jobs:
       security-events: write
     uses: jay-withers/workflows/.github/workflows/codeql.yml@f748462468ce1fc5b385413fba07e41afc28c1db # v1.32.2
     with:
-      languages: '["actions"]'
+      # csharp analyses the obsview app from source (build-mode none), as
+      # well as the workflows.
+      languages: '["csharp", "actions"]'

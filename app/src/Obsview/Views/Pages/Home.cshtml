@@ -1,0 +1,137 @@
+@model HomePage
+@{
+    var days = Model.Days;
+    var t = Model.SloTally;
+    var scored = Model.AppCount - t["no-data"] - t["unavailable"];
+}
+@functions {
+    // `counted`: the tile's big number is the problem count, so the badge doesn't repeat it.
+    private static Microsoft.AspNetCore.Html.IHtmlContent Headline(Headline h, bool counted = false)
+    {
+        var html = new Microsoft.AspNetCore.Html.HtmlContentBuilder();
+        if (h.Problems is > 0)
+        {
+            html.AppendHtml("<span class=\"badge st-failed\">");
+            html.Append(counted ? "needs attention" : $"{h.Problems} problem{Fmt.S(h.Problems.Value)}");
+            html.AppendHtml("</span>");
+        }
+        else if (h.Errors is > 0)
+        {
+            html.AppendHtml("<span class=\"badge st-overdue\">");
+            html.Append($"{h.Errors} error{Fmt.S(h.Errors.Value)}");
+            html.AppendHtml("</span>");
+        }
+        else if (h.Problems is not null)
+        {
+            html.AppendHtml("<span class=\"badge st-ok\">ok</span>");
+        }
+
+        return html;
+    }
+
+    private static string ErrorLines(Headline h) =>
+        h.Errors is { } n ? $"{n} error line{Fmt.S(n)}" : "errors unavailable";
+}
+<h1>Observability</h1>
+<p class="lede">The estate over the last @days day@(Fmt.S(days)). Open a tile for its page.</p>
+
+<div class="nav-tiles">
+  <a class="card nav-tile" href="/apps?days=@days">
+    <div class="head"><span class="title">Apps</span><span class="go" aria-hidden="true">›</span></div>
+    <div>@Headline(Model.AppsNow)</div>
+    @if (Model.Deploys is null)
+    {
+    <div class="value small">Deploys unavailable</div>
+    }
+    else
+    {
+    <div class="value">@Model.Deploys.Count</div>
+    <div class="label">deploy@(Fmt.S(Model.Deploys.Count))@if (Model.SuccessPct is { } pct) {<text> · @Fmt.Fixed(pct, 0)% ok</text>}</div>
+    }
+    <div class="meta foot">@Model.AppCount apps · @ErrorLines(Model.AppsNow)</div>
+  </a>
+
+  <a class="card nav-tile" href="/slo?days=@days">
+    <div class="head"><span class="title">SLOs</span><span class="go" aria-hidden="true">›</span></div>
+    <div>
+      @if (t["exhausted"] > 0)
+      {
+      <span class="badge st-failed">@t["exhausted"] spent</span>
+      }
+      else if (t["at-risk"] > 0)
+      {
+      <span class="badge st-overdue">@t["at-risk"] at risk</span>
+      }
+      else if (t["unavailable"] > 0 && t["unavailable"] < Model.AppCount)
+      {
+      <span class="badge st-removed">partly unavailable</span>
+      }
+      else if (scored > 0)
+      {
+      <span class="badge st-ok">within budget</span>
+      }
+    </div>
+    @if (t["unavailable"] == Model.AppCount)
+    {
+    <div class="value small">SLOs unavailable</div>
+    }
+    else if (scored == 0)
+    {
+    <div class="value small">No SLO events in @Model.SloWindow days</div>
+    }
+    else
+    {
+    <div class="value">@t["ok"]<small class="of"> of @scored</small></div>
+    <div class="label">app@(Fmt.S(scored)) within error budget</div>
+    }
+    <div class="meta foot">@Model.SloWindow-day availability, latency, job runs and deploys</div>
+  </a>
+
+  <a class="card nav-tile" href="/platform?days=@days">
+    <div class="head"><span class="title">Platform</span><span class="go" aria-hidden="true">›</span></div>
+    <div>@Headline(Model.PlatformNow, counted: true)</div>
+    @if (Model.PlatformNow.Problems is not { } problems)
+    {
+    <div class="value small">Checks unavailable</div>
+    }
+    else
+    {
+    <div class="value">@problems</div>
+    <div class="label">problem@(Fmt.S(problems)) now</div>
+    }
+    <div class="meta foot">Landing zone, environment, DNS, sessions · @ErrorLines(Model.PlatformNow)</div>
+  </a>
+
+  <a class="card nav-tile" href="/overall?days=@days">
+    <div class="head"><span class="title">Overall</span><span class="go" aria-hidden="true">›</span></div>
+    @if (Model.Costs is not { } c)
+    {
+    <div class="value small">Costs unavailable</div>
+    <div class="meta foot">The whole subscription's spend</div>
+    }
+    else
+    {
+    @* A budget of 0 is no budget, as Costs.Build reads it. *@
+    if (c.Budget != 0)
+    {
+    <div>
+      @if (c.MonthToDate > c.Budget)
+      {
+      <span class="badge st-failed">over budget</span>
+      }
+      else if (c.Forecast is { } f && f > c.Budget)
+      {
+      <span class="badge st-overdue">forecast over budget</span>
+      }
+      else
+      {
+      <span class="badge st-ok">within budget</span>
+      }
+    </div>
+    }
+    <div class="value">@c.Symbol@Fmt.Grouped(c.MonthToDate, 2)</div>
+    <div class="label">spent in @c.MonthLabel</div>
+    <div class="meta foot">@if (c.Budget != 0) {<text>@Fmt.Fixed(c.BudgetUsed, 0)% of @c.Symbol@Fmt.Grouped(c.Budget, 0)</text>} else {<text>No budget set</text>}@if (c.Forecast is { } forecast) {<text> · forecast @c.Symbol@Fmt.Grouped(forecast, 0)</text>}</div>
+    }
+  </a>
+</div>

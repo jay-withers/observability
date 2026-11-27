@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Obsview/Obsview.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Obsview.Tests/Obsview.Tests.csproj" />
+  </Folder>
+</Solution>

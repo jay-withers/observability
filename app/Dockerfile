@@ -1,22 +1,25 @@
 # syntax=docker/dockerfile:1@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 
-# The same two-stage shape as health, from jay-withers/dev-containers. Keep the
-# two at the same version: python-app-builder is built FROM python-app, and a
-# virtualenv is bound to the minor Python that created it (market-agent's
-# "No module named" outage). Build for linux/amd64; `make build` does.
-FROM ghcr.io/jay-withers/dev-containers/python-app-builder:v0.24.4@sha256:02b416deafd56e0042b9e0525686fd68ed4a7c8d3a3892ecd39e5f0e91e8566c AS builder
+# Two stages from jay-withers/dev-containers: the builder is dotnet-app plus
+# the SDK, so the app is built against exactly the runtime and OS it runs on.
+# Keep the two at the same version (Renovate's "dotnet app base images" group
+# moves them together), and the runtime's major.minor equal to mise.toml's
+# dotnet SDK, which container-build checks. Build for linux/amd64; `make
+# build` does.
+FROM ghcr.io/jay-withers/dev-containers/dotnet-app-builder:v0.24.1@sha256:88af7d7c8681cd39237b5dc762b656cbf8ab1941007c1e05939ed75d61a76c27 AS builder
 
-WORKDIR /app
+WORKDIR /src
 
-COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --no-editable
+# The project files and lock files first, so a code change reuses the
+# restore layer. --locked-mode: the image installs exactly what CI tested.
+COPY global.json Directory.Build.props Obsview.slnx ./
+COPY src/Obsview/Obsview.csproj src/Obsview/packages.lock.json src/Obsview/
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore src/Obsview/Obsview.csproj --locked-mode
 
 COPY src ./src
-# --no-editable: the runtime stage copies only the venv, so an editable
-# install would leave a .pth pointing at a /app/src that is not there.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet publish src/Obsview/Obsview.csproj --configuration Release --no-restore --output /out
 
 # The chart library, fetched here rather than committed: at ~1 MB it is over
 # the repo's 500 KB large-file hook, and a CDN at runtime would need the CSP
@@ -31,25 +34,28 @@ ADD --checksum=sha256:bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e1
 RUN chmod 0755 /vendor && chmod 0644 /vendor/echarts.min.js
 
 
-FROM ghcr.io/jay-withers/dev-containers/python-app:v0.24.4@sha256:d355e08147bbb8304648facc377ecfabddcfd1b08a482c00d357f1c02ff0d9ee
+FROM ghcr.io/jay-withers/dev-containers/dotnet-app:v0.24.1@sha256:553c52ab245181b443de271c0f8157585c1a6009a3ddab8d19bc509162e0a0b0
 
 LABEL org.opencontainers.image.source="https://github.com/jay-withers/observability"
 
-COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
-# The chart library, fetched in the builder stage below `uv sync`.
+COPY --from=builder --chown=10001:10001 /out /app
 COPY --from=builder /vendor /app/vendor
-ENV VENDOR_DIR=/app/vendor
+# PORT is what the app binds and the ingress targets (`make deploy` sets it
+# too). The base's ASPNETCORE_HTTP_PORTS is cleared, so the two never disagree.
+ENV VENDOR_DIR=/app/vendor \
+    PORT=8000 \
+    ASPNETCORE_HTTP_PORTS=
 
 USER 10001
 
 EXPOSE 8000
 
 # /healthz answers from memory, so this restarts a wedged process and never
-# one that is merely waiting on Log Analytics.
+# one that is merely waiting on Log Analytics. The runtime image has no curl;
+# bash's /dev/tcp makes the request.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"]
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
 
-# The single source of truth for the executable's name: Terraform sets `args`
-# only, never `command` (gym-log's outage).
-ENTRYPOINT ["obsview"]
-CMD ["serve"]
+# The single source of truth for the executable: Terraform sets no command
+# or args, and the app takes none.
+ENTRYPOINT ["dotnet", "/app/obsview.dll"]

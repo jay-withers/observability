@@ -1,0 +1,30 @@
+@model PlatformPage
+@{ var days = Model.Days; var p = Model.Panels; }
+<h1>Platform</h1>
+<p class="lede">The shared infrastructure every app runs on: the landing zone, the Container Apps environment, DNS, session resources and the cost feed. Everything here is what no app owns. No deploys are recorded for it; its Terraform changes show as drift.</p>
+<nav class="jump" aria-label="Sections">
+  <a href="#ops">Jobs &amp; ops</a><a href="#costs">Costs</a><a href="#errors">Errors</a>
+</nav>
+
+<h2 class="section-title" id="ops">Jobs &amp; ops</h2>
+@if (p.Ops is null)
+{
+<div class="card"><p class="empty">Couldn't read the checks just now; the rest of the page is current.</p></div>
+}
+else
+{
+@await Html.PartialAsync("_Ops", new OpsPanel(p.Ops, "ops", false, days, Model.Silent))
+}
+
+<h2 class="section-title" id="costs">Costs</h2>
+@if (p.Costs is not { } c)
+{
+<div class="card"><p class="empty">Couldn't read the costs just now; the rest of the page is current.</p></div>
+}
+else
+{
+<p class="sub">Resource groups no app owns (the whole subscription is on <a href="/overall?days=@days">Overall</a>), actual cost before any credit, from <code>Costs_CL</code>@if (c.DataThrough is { } through) {<text>, through @Times.DayMonth(through)</text>}.@if (c.LeftOut > 0) {<text> @c.LeftOut row@(Fmt.S(c.LeftOut)) in another currency left out.</text>}</p>
+@await Html.PartialAsync("_Costs", new CostsPanel(c, "costs", false))
+}
+
+@await Html.PartialAsync("_Errors", new ErrorsPanel(p.Errors, p.ErrorTotal, p.Now, days))

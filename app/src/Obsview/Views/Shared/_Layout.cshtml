@@ -1,0 +1,59 @@
+@model PageModel
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/static/app.css">
+<title>@Model.Title</title>
+</head>
+<body>
+@if (Model.Page != "login")
+{
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="/@(Model.Days != 0 ? $"?days={Model.Days}" : "")">Observability <span class="env">@Model.Environment</span></a>
+    @* Beside the home link, not inside it, so the link's name is stable. The
+       sign-in page has no header at all. Not a secret: /healthz reports the tag. *@
+    @if (Model.Release.Length > 0)
+    {
+    <span class="version">@Model.Release</span>
+    }
+    <nav class="tabs" aria-label="Views">
+      <a href="/apps?days=@Model.Days" aria-current="@(Model.Page == "apps" ? "page" : null)">Apps</a>
+      <a href="/slo?days=@Model.Days" aria-current="@(Model.Page == "slo" ? "page" : null)">SLOs</a>
+      <a href="/platform?days=@Model.Days" aria-current="@(Model.Page == "platform" ? "page" : null)">Platform</a>
+      <a href="/overall?days=@Model.Days" aria-current="@(Model.Page == "overall" ? "page" : null)">Overall</a>
+    </nav>
+    @if (Model.Days != 0 && Model.ShowRange)
+    {
+    <div class="range" role="group" aria-label="Time range">
+      @foreach (var r in Queries.Ranges)
+      {
+      <a href="?days=@r" aria-current="@(r == Model.Days ? "true" : null)">@(r)d</a>
+      }
+    </div>
+    }
+  </div>
+</header>
+}
+<main class="wrap">
+  @if (Model.Demo && Model.Page != "login")
+  {
+  <p class="banner"><strong>Demo data.</strong> No <code>WORKSPACE_ID</code> is configured, so these numbers are generated, not real.</p>
+  }
+  @RenderBody()
+</main>
+@if (Model.PayloadJson is { } payload)
+{
+<script type="application/json" id="chart-data">@Html.Raw(payload)</script>
+<script src="/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+}
+</body>
+</html>

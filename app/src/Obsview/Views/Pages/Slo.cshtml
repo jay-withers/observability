@@ -1,0 +1,54 @@
+@model SloIndexPage
+@{ var days = Model.Days; }
+<h1>SLOs</h1>
+<p class="lede">Each app's service level objectives over the last @Model.WindowDays days, rolling, whatever the range elsewhere. A tile shows the error budget the app has least of; open it for every SLI.</p>
+
+<div class="nav-tiles apps-grid">
+  @foreach (var r in Model.Reports)
+  {
+  var least = r.LeastBudget;
+  <a class="card nav-tile" href="/slo/@r.Slug?days=@days">
+    <div class="head"><span class="title">@r.Title</span><span class="go" aria-hidden="true">›</span></div>
+    <div>@SloHtml.Badge(r.Status, r.Label)</div>
+    @if (least is null)
+    {
+    <div class="value small">@(r.Status == "unavailable" ? "SLIs unavailable" : $"No events in {Model.WindowDays} days")</div>
+    }
+    else
+    {
+    <div class="value">@Slo.FormatBudget(least.BudgetLeft!.Value)</div>
+    <div class="label">@least.Objective.Title.ToLowerInvariant() budget @(least.BudgetLeft < 0 ? "overspent" : "left")</div>
+    }
+    <ul class="slis">
+      @foreach (var s in r.Measured)
+      {
+      <li>
+        <span class="name">@s.Objective.Title</span>
+        @if (s.Status == "unavailable")
+        {
+        <span class="fig">unavailable</span>
+        }
+        else
+        {
+        <span class="fig">@Slo.FormatRatio(s.Ratio) <small>/ @Slo.FormatRatio(s.Objective.Target)</small></span>@SloHtml.Meter(s)
+        }
+      </li>
+      }
+    </ul>
+  </a>
+  }
+</div>
+
+<h2 class="section-title" id="objectives">Objectives</h2>
+<div class="card">
+  <table class="objectives">
+    <thead><tr><th scope="col">SLI</th><th scope="col">Good events</th><th scope="col">Target</th></tr></thead>
+    <tbody>
+      @foreach (var o in Slo.Objectives)
+      {
+      <tr><td>@o.Title</td><td>@o.Good@if (o.WebOnly) {<text> <small>(apps with ingress)</small></text>}</td><td>@Slo.FormatRatio(o.Target)</td></tr>
+      }
+    </tbody>
+  </table>
+  <p class="sub">The error budget is the bad events the target allows over @Model.WindowDays days. Under a quarter left is <em>at risk</em>; none left is <em>budget spent</em>. An SLI with no events in the window is left off its tile.</p>
+</div>

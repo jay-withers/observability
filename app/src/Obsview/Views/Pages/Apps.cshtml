@@ -1,0 +1,37 @@
+@model AppsPage
+@{ var days = Model.Days; }
+<h1>Apps</h1>
+<p class="lede">Each app's deploys, checks, spend and errors over the last @days day@(Fmt.S(days)). Open one for its own page; the shared infrastructure is under <a href="/platform?days=@days">Platform</a>.</p>
+
+<div class="nav-tiles apps-grid">
+  @foreach (var s in Model.Summaries)
+  {
+  <a class="card nav-tile" href="/apps/@s.App.Slug?days=@days">
+    <div class="head"><span class="title">@s.App.Title</span><span class="go" aria-hidden="true">›</span></div>
+    <div>
+      @if (s.Problems is > 0)
+      {
+      <span class="badge st-failed">@s.Problems problem@(Fmt.S(s.Problems.Value))</span>
+      }
+      else if (s.Errors is > 0)
+      {
+      <span class="badge st-overdue">@s.Errors error@(Fmt.S(s.Errors.Value))</span>
+      }
+      else if (s.Problems is not null)
+      {
+      <span class="badge st-ok">ok</span>
+      }
+    </div>
+    <div class="meta">@if (s.Last is { } last) {<text>@last.Version · @Deployments.FormatAgo(last.When, Model.Now)</text>} else {<text>No deploys recorded</text>}</div>
+    <div class="meta foot">
+      @s.Deploys deploy@(Fmt.S(s.Deploys))@if (s.SuccessPct is { } pct) {<text> · @Fmt.Fixed(pct, 0)% ok</text>}
+      · @if (s.Errors is { } errors) {<text>@errors error line@(Fmt.S(errors))</text>} else {<text>errors unavailable</text>}
+      · @if (s.Spend is { } spend) {<text>@Model.Symbol@Fmt.Grouped(spend, 2)</text>} else {<text>spend unavailable</text>}
+    </div>
+  </a>
+  }
+</div>
+
+<h2 class="section-title" id="deployments">All apps' deploys</h2>
+<p class="sub">Every deploy to @Model.Environment, from <code>Deployments_CL</code>.</p>
+@await Html.PartialAsync("_Deployments", new DeploymentsPanel(Model.Deployments, "deploy", false, days, Model.AppSlugs))

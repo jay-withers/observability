@@ -1,0 +1,142 @@
+@model CostsPanel
+@* The costs panels, shared by the Overall page, the platform's and each
+   app's. `Overall` is the whole subscription: the budget card, the daily
+   chart and treemap by area, and the by-area bars. Otherwise the view is a
+   slice, stacked by its own services, with nothing naming another area. *@
+@{
+    var view = Model.View;
+    var overall = Model.Overall;
+    string Money(double v) => view.Symbol + Fmt.Grouped(v, 2);
+    var span = Times.DayMonth(view.RangeStart) + (view.RangeEnd != view.RangeStart ? " – " + Times.DayMonth(view.RangeEnd) : "");
+}
+@if (overall)
+{
+<section class="card budget" aria-label="@view.MonthLabel against the budget">
+  <div class="budget-head">
+    <div>
+      <div class="label">@view.MonthLabel to date, whole subscription</div>
+      <div class="hero-number">@Money(view.MonthToDate)</div>
+    </div>
+    <div class="budget-side">
+      @if (view.Forecast is { } forecast)
+      {
+      <div><span class="label">Forecast</span> <b class="@(forecast > view.Budget ? "over" : "")">@Money(forecast)</b></div>
+      }
+      <div><span class="label">Budget</span> <b>@Money(view.Budget)</b> <span class="label">· @Fmt.Fixed(view.BudgetUsed, 0)% used</span></div>
+    </div>
+  </div>
+  <div class="bullet" role="img" aria-label="@Money(view.MonthToDate) spent, forecast @Money(view.Forecast ?? 0), budget @Money(view.Budget)">
+    @if (view.Forecast is { } f)
+    {
+    <i class="forecast" style="width: @(view.Scale(f))%"></i>
+    }
+    <i class="spent" style="width: @(view.Scale(view.MonthToDate))%"></i>
+    <b class="limit" style="left: @(view.Scale(view.Budget))%"></b>
+  </div>
+  <ul class="legend" style="margin-top:8px">
+    <li><span class="swatch" style="background: var(--series-1)"></span>Spent</li>
+    <li><span class="swatch" style="background: var(--forecast)"></span>Forecast to month end</li>
+    <li><span class="swatch" style="background: var(--ink); width:2px"></span>Budget</li>
+  </ul>
+</section>
+}
+
+<section class="tiles four" style="margin-top:10px" aria-label="The range">
+  <div class="card tile">
+    <div class="label">Spent, @span</div>
+    <div class="value">@Money(view.Total)</div>
+    @if (view.Delta is { } delta)
+    {
+    <div class="delta @view.Tone">@delta</div>
+    }
+  </div>
+</section>
+
+<div class="card" style="margin-top:10px">
+  <h2>Daily spend by @(overall ? "area" : "service")</h2>
+  <p class="sub">@span, stacked</p>
+  <ul class="legend">
+    @for (var i = 0; i < view.Charts.SeriesKeys.Count; i++)
+    {
+    <li><span class="swatch area-@(i + 1)"></span>@view.Charts.SeriesKeys[i]</li>
+    }
+  </ul>
+  <div class="chart" data-group="@Model.Group" data-chart="spend" role="img" aria-label="Daily spend, stacked by @(overall ? "area" : "service")"></div>
+</div>
+
+@if (view.Charts.Treemap.Count > 0)
+{
+<div class="card" style="margin-top:10px">
+  <h2>Where the money went</h2>
+  <p class="sub">@span. @(overall ? "Area, then resource group" : "Resource group"), then resource, then service. Tap to zoom in.</p>
+  <div class="chart tall" data-group="@Model.Group" data-chart="treemap" role="img" aria-label="Treemap of the range's spend"></div>
+</div>
+}
+
+@if (overall)
+{
+<div class="card" style="margin-top:10px">
+  <h2>By area</h2>
+  <p class="sub">@span. Areas are fixed groups of resource groups.</p>
+  <ul class="hbars">
+    @foreach (var b in view.Areas)
+    {
+    <li><div class="hbar-label"><span>@b.Label</span><span class="num">@Money(b.Value)</span></div>
+      <div class="hbar-track"><i class="area-@b.Colour" style="width: @(b.Width)%"></i></div></li>
+    }
+    @if (view.Areas.Count == 0)
+    {
+    <li class="empty">No spend in this range.</li>
+    }
+  </ul>
+</div>
+}
+
+<div class="grid halves">
+  <div class="card">
+    <h2>By resource group</h2>
+    <p class="sub">@span</p>
+    <ul class="hbars">
+      @foreach (var b in view.Groups)
+      {
+      <li><div class="hbar-label"><span>@b.Label</span><span class="num">@Money(b.Value)</span></div>
+        <div class="hbar-track">@if (b.Colour > 0) {<i class="area-@b.Colour" style="width: @(b.Width)%"></i>} else {<i style="width: @(b.Width)%; background: var(--series-1)"></i>}</div></li>
+      }
+      @if (view.Groups.Count == 0)
+      {
+      <li class="empty">No spend in this range.</li>
+      }
+    </ul>
+  </div>
+  <div class="card">
+    <h2>By service</h2>
+    <p class="sub">@span</p>
+    <ul class="hbars">
+      @foreach (var b in view.Services)
+      {
+      <li><div class="hbar-label"><span>@b.Label</span><span class="num">@Money(b.Value)</span></div>
+        <div class="hbar-track"><i style="width: @(b.Width)%; background: var(--series-1)"></i></div></li>
+      }
+      @if (view.Services.Count == 0)
+      {
+      <li class="empty">No spend in this range.</li>
+      }
+    </ul>
+  </div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>By resource</h2>
+  <p class="sub">@span. Spend the feed has no resource for (days before it sent one, or until the table has the column) shows as "(not broken down)".</p>
+  <ul class="hbars">
+    @foreach (var b in view.Resources)
+    {
+    <li><div class="hbar-label"><span>@b.Label</span><span class="num">@Money(b.Value)</span></div>
+      <div class="hbar-track"><i style="width: @(b.Width)%; background: var(--series-1)"></i></div></li>
+    }
+    @if (view.Resources.Count == 0)
+    {
+    <li class="empty">No spend in this range.</li>
+    }
+  </ul>
+</div>
