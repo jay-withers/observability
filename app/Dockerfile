@@ -6,7 +6,7 @@
 # moves them together), and the runtime's major.minor equal to mise.toml's
 # dotnet SDK, which container-build checks. Build for linux/amd64; `make
 # build` does.
-FROM ghcr.io/jay-withers/dev-containers/dotnet-app-builder:v0.24.4@sha256:1a60aa90663d606f16c2b2eeb7d92c549dc19b4827d52b266a3ef03ab1c90cb6 AS builder
+FROM ghcr.io/jay-withers/dev-containers/dotnet-app-builder:v0.25.1@sha256:551395f26018514373f9461a13156acaf1363396561da6703aea49dac11dfc79 AS builder
 
 WORKDIR /src
 
@@ -34,7 +34,7 @@ ADD --checksum=sha256:bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e1
 RUN chmod 0755 /vendor && chmod 0644 /vendor/echarts.min.js
 
 
-FROM ghcr.io/jay-withers/dev-containers/dotnet-app:v0.24.4@sha256:1237f395ef8812411a78b950aaa154c238fda54748248502ead0fff387fe7d8a
+FROM ghcr.io/jay-withers/dev-containers/dotnet-app:v0.25.1@sha256:73c7a086c69770f807937aa1a12d6a19b3a2da6687295be07c73a873c31b0c31
 
 LABEL org.opencontainers.image.source="https://github.com/jay-withers/observability"
 
