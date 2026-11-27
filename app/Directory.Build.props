@@ -1,0 +1,18 @@
+<!--
+  Shared by the app and its tests. A committed lock file per project, which
+  workflows' dotnet.yml checks (`locked`), and analyzers and code style
+  reported by the build, which its `warnings-as-errors` turns into the lint
+  gate. No TreatWarningsAsErrors here: it would fail restore on a new NuGet
+  advisory and leave that input unable to turn the gate off.
+-->
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+</Project>

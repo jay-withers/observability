@@ -24,8 +24,10 @@ Later phases add app health and delivery.
 
 ## obsview: the replacement for Grafana
 
-`app/` is **obsview**, a small FastAPI app that replaced Grafana: the same
-tables, with charts designed for them, built for a phone. It was built in
+`app/` is **obsview**, a small ASP.NET Core app (.NET 11, MVC with Razor
+views) that replaced Grafana: the same tables, with charts designed for
+them, built for a phone. It began as a FastAPI app and was ported to .NET in
+November 2026 with its routes, queries and pages unchanged. It was built in
 steps:
 
 1. **Deployments**: KPI tiles with sparklines and deltas against the
@@ -49,8 +51,8 @@ could not leave Jobs and ops or Costs with nowhere to live.)
 How it works:
 
 - **One query per view.** It fetches the raw rows for the range (and the one
-  before it, for the deltas) and computes every tile and chart in Python
-  (`app/src/obsview/deployments.py`), so the arithmetic is unit-tested
+  before it, for the deltas) and computes every tile and chart in C#
+  (`app/src/Obsview/Deployments.cs`), so the arithmetic is unit-tested
   rather than living in panel KQL. Results are cached in memory for five
   minutes, and the default view is fetched at start-up.
 - **It reads the workspace as the container app's own identity**
@@ -67,8 +69,9 @@ Run it locally with `make app-run` (add `PORT=` if 8000 is taken). With no
 `WORKSPACE_ID` it serves generated demo data under a banner. Put
 `WORKSPACE_ID=<customer id>` in `app/.env` after `az login` to read the real
 tables as yourself. The passcode is `local` unless `APP_PASSCODE` says
-otherwise. `make test` runs the app's tests and mypy along with the check
-scripts' tests.
+otherwise. `make test` builds the app with warnings as errors and runs its
+tests along with the check scripts' tests; `make app-lint` checks its
+formatting. The .NET SDK comes from `mise.toml` (`make install`).
 
 ## How it fits together
 
@@ -175,7 +178,8 @@ uses it.
 ```bash
 make install          # mise tools and pre-commit hooks
 make lint             # every hook against every file
-make test             # the app's tests and the check scripts' tests (Azure stubbed out)
+make test             # the app's build and tests and the check scripts' tests (Azure stubbed out)
+make app-lint         # dotnet format --verify-no-changes over the app
 make app-run          # serve obsview locally (demo data unless app/.env sets WORKSPACE_ID)
 make validate         # terraform init (no backend) + validate
 make init             # terraform init against dev's backend
@@ -203,9 +207,11 @@ Every workflow calls a shared one in
 [jay-withers/workflows](https://github.com/jay-withers/workflows), pinned by
 SHA, apart from the scheduled checks, which run this repo's scripts.
 
-- **ci-pre-commit**, **ci-python** (obsview's tests), **ci-container-build** (build plus Trivy) and
-  **ci-terraform** (validate, then a real plan of dev on the PR) on pull
-  requests. **ci-codeql** scans the workflows.
+- **ci-pre-commit**, **ci-dotnet** (obsview's build, format check, tests
+  and coverage), **ci-container-build** (build plus Trivy, and the image's
+  .NET runtime against `mise.toml`) and **ci-terraform** (validate, then a
+  real plan of dev on the PR) on pull requests. **ci-codeql** scans the C#
+  and the workflows.
 - **cd-tag** → **cd-publish**: a release on every merge, publishing
   `ghcr.io/jay-withers/observability/obsview` and deploying it with the
   shared smoke test and rollback, like any app.
@@ -219,11 +225,12 @@ SHA, apart from the scheduled checks, which run this repo's scripts.
 
 ## Changing a view
 
-A view is one KQL query for raw rows (`kql` and `window` in its module under
-`app/src/obsview/`) and a pure function that turns them into tiles and chart
-data (`build`), with its tests in `app/tests/`. The page is a Jinja template;
-the charts are drawn by `static/app.js` from the JSON the template embeds.
-`make app-run` serves it on demo data.
+A view is one KQL query for raw rows (`Kql` and `Window` in its class under
+`app/src/Obsview/`) and a pure function that turns them into tiles and chart
+data (`Build`), with its tests in `app/tests/Obsview.Tests/`. The page is a
+Razor view under `app/src/Obsview/Views/`; the charts are drawn by
+`wwwroot/static/app.js` from the JSON the view embeds. `make app-run` serves
+it on demo data.
 
 The home page, `/`, is a tile for each of the pages, **Apps**, **SLOs**,
 **Platform** and **Overall**, with its headline: the apps' deploys, problems
@@ -242,7 +249,7 @@ daily spend stacked by area, the treemap (area, resource group, resource,
 service) and the range's spend by area, resource group, service and
 resource. Every page opens on the last 7 days, and its section links stay
 pinned while it scrolls. Which rows belong to
-an app is set in `app/src/obsview/apps.py`: add a row there when a new app
+an app is set in `app/src/Obsview/Apps.cs`: add a row there when a new app
 joins the estate, or its rows show up under Platform. The old
 `/deployments`, `/ops` and `/costs` URLs redirect (`/costs` to Overall).
 
@@ -264,7 +271,7 @@ the budget's burn-down by day.
 Availability and latency apply to apps with ingress; repo-agent and
 security-testing run jobs only. An app is *within budget* with a quarter or
 more of every budget left, *at risk* under a quarter, and *budget spent* at
-none. The targets are `OBJECTIVES` in `app/src/obsview/slo.py`. Alerting
+none. The targets are `Slo.Objectives` in `app/src/Obsview/Slo.cs`. Alerting
 stays in Azure Monitor: these pages only show the figures.
 
 ## Costs

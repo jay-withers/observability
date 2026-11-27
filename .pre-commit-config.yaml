@@ -15,6 +15,10 @@ repos:
         args: ["--allow-multiple-documents"]
 
       - id: end-of-file-fixer
+        # NuGet writes packages.lock.json with no final newline and rewrites
+        # it on every restore, so a fixed one would fail dotnet.yml's locked
+        # check (app/).
+        exclude: (^|/)packages\.lock\.json$
 
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
@@ -54,18 +58,6 @@ repos:
     hooks:
       - id: shellcheck
         args: [--external-sources]
-
-  # The obsview app (app/). Its config, rule selection included, is in
-  # app/pyproject.toml, which ruff finds by walking up from each file.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 9026c9127e153371d7a78dfcb0c45ae2046a3d10 # frozen: v0.17.6
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-
-      # Python only: the upstream hook's types_or includes markdown.
-      - id: ruff-format
-        types_or: [python, pyi]
 
   - repo: local
     hooks:

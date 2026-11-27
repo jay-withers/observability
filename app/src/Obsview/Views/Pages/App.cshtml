@@ -1,0 +1,38 @@
+@model AppPage
+@{ var days = Model.Days; var app = Model.App; var p = Model.Panels; }
+<p class="crumb"><a href="/apps?days=@days">Apps</a> ›</p>
+<h1>@app.Title</h1>
+<p class="lede"><code>@app.Slug</code>: its deploys, checks, spend and errors over the last @days day@(Fmt.S(days)). Its SLOs are on <a href="/slo/@app.Slug?days=@days">its SLO page</a>.</p>
+<nav class="jump" aria-label="Sections">
+  <a href="#deployments">Deployments</a><a href="#ops">Jobs &amp; ops</a><a href="#costs">Costs</a><a href="#errors">Errors</a>
+</nav>
+
+@await Html.PartialAsync("_Errors", new ErrorsPanel(p.Errors, p.ErrorTotal, p.Now, days))
+
+<h2 class="section-title" id="deployments">Deployments</h2>
+@await Html.PartialAsync("_Deployments", new DeploymentsPanel(Model.Deployments, "deploy", true, days, Model.AppSlugs))
+
+<h2 class="section-title" id="ops">Jobs &amp; ops</h2>
+@if (p.Ops is null)
+{
+<div class="card"><p class="empty">Couldn't read the checks just now; the rest of the page is current.</p></div>
+}
+else if (p.Ops.Sections.Count == 0 && p.Ops.FailedRuns is { Count: 0 })
+{
+<div class="card"><p class="empty">No checks or failed runs for @app.Title in this range.</p></div>
+}
+else
+{
+@await Html.PartialAsync("_Ops", new OpsPanel(p.Ops, "ops", true, days, []))
+}
+
+<h2 class="section-title" id="costs">Costs</h2>
+@if (p.Costs is null)
+{
+<div class="card"><p class="empty">Couldn't read the costs just now; the rest of the page is current.</p></div>
+}
+else
+{
+<p class="sub">Resource group <code>@app.ResourceGroup</code>, actual cost before any credit.</p>
+@await Html.PartialAsync("_Costs", new CostsPanel(p.Costs, "costs", false))
+}

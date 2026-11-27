@@ -12,8 +12,8 @@ locals {
   # nothing) can't apply to an image used only at create.
   image = "ghcr.io/jay-withers/dev-containers/placeholder:latest"
 
-  # obsview's port (`obsview serve`); the Dockerfile EXPOSEs it and both
-  # probes check it.
+  # obsview's port, which it binds from PORT (`make deploy` sets it, the
+  # Dockerfile defaults and EXPOSEs it), and which both probes check.
   target_port = 8000
 
   # The smallest combination Container Apps accepts. obsview idles at a

@@ -1,7 +1,12 @@
-# The image needs pyproject.toml, uv.lock and src/ only. Everything else stays
-# out of the build context, above all .env, which holds the local passcode.
+# The image needs the solution's build files and src/ only. Everything else
+# stays out of the build context, above all .env, which holds the local
+# passcode, and any bin/ or obj/ from a local build.
 *
-!pyproject.toml
-!uv.lock
+!global.json
+!Directory.Build.props
+!Obsview.slnx
 !src/
-**/__pycache__
+src/**/bin/
+src/**/obj/
+**/.env
+**/.env.*

@@ -1,0 +1,36 @@
+@model ErrorsPanel
+@* The errors panel, shared by the platform and each app's page. *@
+<h2 class="section-title" id="errors">Errors</h2>
+<div class="card">
+  @if (Model.Errors is null)
+  {
+  <p class="empty">Couldn't read the console logs just now; the rest of the page is current.</p>
+  }
+  else if (Model.Errors.Count > 0)
+  {
+  <ol class="recent">
+    @foreach (var g in Model.Errors.Take(30))
+    {
+    <li>
+      <div class="what">@g.Signature <small>@g.Workload</small></div>
+      <div class="when" title="@Times.IsoStamp(g.Last)">@Deployments.FormatAgo(g.Last, Model.Now)</div>
+      <div class="how">@g.Count time@(Fmt.S(g.Count))@if (g.Count > 1) {<text>, first @Deployments.FormatAgo(g.First, Model.Now)</text>} · <code class="sample">@g.Sample</code></div>
+      <div><span class="badge st-failed">failed</span></div>
+    </li>
+    }
+  </ol>
+  if (Model.Errors.Count > 30)
+  {
+  <p class="sub">And @(Model.Errors.Count - 30) more kinds of error.</p>
+  }
+  var grouped = Model.Errors.Sum(g => g.Count);
+  if (Model.ErrorTotal > grouped)
+  {
+  <p class="sub">@Model.ErrorTotal error lines in all; grouped from the newest @Errors.PerWorkload of each app or job.</p>
+  }
+  }
+  else
+  {
+  <p class="empty">No errors logged in the last @Model.Days day@(Fmt.S(Model.Days)).</p>
+  }
+</div>

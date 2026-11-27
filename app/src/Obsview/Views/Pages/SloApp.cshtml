@@ -1,0 +1,55 @@
+@model SloAppPage
+@{ var days = Model.Days; var app = Model.App; var report = Model.Report; }
+<p class="crumb"><a href="/slo?days=@days">SLOs</a> ›</p>
+<h1>@app.Title</h1>
+<p class="lede">@SloHtml.Badge(report.Status, report.Label) · its SLIs over the last @Model.WindowDays days, rolling. Deploys, checks, costs and errors are on <a href="/apps/@app.Slug?days=@days">its app page</a>.</p>
+
+@foreach (var s in report.Slis)
+{
+<h2 class="section-title" id="@s.Objective.Key">@s.Objective.Title</h2>
+<div class="card slo">
+  <div class="slo-head">
+    <p class="sub">@s.Objective.Good, of all @s.Objective.Unit. Target @Slo.FormatRatio(s.Objective.Target).</p>
+    @SloHtml.Badge(s.Status, s.Label)
+  </div>
+  @if (s.Status == "unavailable")
+  {
+  <p class="empty">Couldn't read this SLI's events just now; the rest of the page is current.</p>
+  }
+  else if (s.Status == "no-data")
+  {
+  <p class="empty">No @s.Objective.Unit in the last @Model.WindowDays days, so no budget to spend.</p>
+  }
+  else
+  {
+  <section class="tiles slo-figures" aria-label="@s.Objective.Title figures">
+    <div class="tile">
+      <div class="label">SLI</div>
+      <div class="value">@Slo.FormatRatio(s.Ratio)</div>
+      <div class="delta">@Fmt.Count(s.Good) of @Fmt.Count(s.Total) @s.Objective.Unit</div>
+    </div>
+    <div class="tile">
+      <div class="label">Error budget @(s.BudgetLeft < 0 ? "overspent" : "left")</div>
+      <div class="value">@Slo.FormatBudget(s.BudgetLeft!.Value)</div>
+      @SloHtml.Meter(s)
+    </div>
+    <div class="tile">
+      <div class="label">Bad @s.Objective.Unit</div>
+      <div class="value">@Fmt.Count(s.Bad)</div>
+      <div class="delta">of @Fmt.Grouped(s.Allowed, 1) allowed</div>
+    </div>
+    <div class="tile">
+      <div class="label">Burn rate, 24h</div>
+      <div class="value">@SloHtml.Burn(s.BurnDay)</div>
+      <div class="delta">1× spends it in @Model.WindowDays days</div>
+    </div>
+    <div class="tile">
+      <div class="label">Burn rate, 7d</div>
+      <div class="value">@SloHtml.Burn(s.BurnWeek)</div>
+    </div>
+  </section>
+  <h3 class="chart-title">Error budget left, by day</h3>
+  <div class="chart short" data-chart="burndown" data-group="slo" data-key="@s.Objective.Key" role="img" aria-label="@s.Objective.Title error budget left per day over @Model.WindowDays days"></div>
+  }
+</div>
+}

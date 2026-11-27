@@ -5,8 +5,10 @@
 [tools]
 # runs pre-commit and its Python hooks.
 python = "3.15.2"
-# runs the obsview app (app/) and its tests.
-uv = "0.13.9"
+# builds, runs and tests the obsview app (app/). Its major.minor is the
+# runtime of dev-containers' dotnet-app the image runs on, which
+# container-build checks (workflows v1.39.0+).
+dotnet = "11.0.100"
 pre-commit = "4.7.0"
 # actionlint lints workflow run: blocks with it, and silently skips them without it.
 shellcheck = "0.11.0"

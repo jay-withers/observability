@@ -1,0 +1,26 @@
+name: ci-dotnet
+
+# The obsview app's build, tests and coverage, through the shared dotnet.yml,
+# run from app/ where its solution, global.json and lock files live. It
+# reports as `test / Test`, the check ci-python reported and github-repos
+# requires, so the ruleset needs no change.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: jay-withers/workflows/.github/workflows/dotnet.yml@c09184e4a36bda973662132cf1d80ee50477796e # v1.39.0
+    with:
+      working-directory: app
+      # Both floors fail the check: the total (coverage-min), so the app
+      # can't slip, and the lines a PR changes (diff-coverage), so new code
+      # comes with its tests. The summary is in the job summary; there is no
+      # PR comment. Build warnings (the analyzers and code style) and dotnet
+      # format are on by default: the counterpart of mypy and ruff.
+      coverage: true
+      coverage-min: "90"
+      diff-coverage: "90"

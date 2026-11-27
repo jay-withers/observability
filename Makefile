@@ -9,17 +9,17 @@ IMAGE_TAG_EXPLICIT := $(filter-out file,$(origin IMAGE_TAG))
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test app-test app-vendor app-run init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain passcode expiry sessions costs
+.PHONY: help install lint test app-test app-lint app-vendor app-run init fmt validate plan apply outputs build push deploy deployed-tag smoke url dns bind-domain passcode expiry sessions costs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install mise tools, pre-commit hooks and the app's Python dependencies
+install: ## Install mise tools, pre-commit hooks and the app's NuGet packages
 	mise install
 	pre-commit install
 	pre-commit install --hook-type commit-msg
-	cd app && uv sync --extra dev
+	cd app && dotnet restore --locked-mode
 
 lint: ## Run all pre-commit hooks against every file
 	pre-commit run --all-files
@@ -27,10 +27,15 @@ lint: ## Run all pre-commit hooks against every file
 test: app-test ## Test the check scripts (stubbed az, curl, openssl) and the app
 	tests/run.sh
 
-# --extra dev: pytest is an extra, so `uv run` alone would not install it.
-app-test: ## Test and type-check the obsview app (app/)
-	cd app && uv run --extra dev pytest -q
-	cd app && uv run --extra dev mypy
+# Warnings as errors, as CI's dotnet.yml builds: the analyzers and code style
+# are the type check and lint. Tests run on Microsoft.Testing.Platform
+# (app/global.json).
+app-test: ## Build and test the obsview app (app/)
+	cd app && dotnet build -warnaserror
+	cd app && dotnet test --no-build
+
+app-lint: ## Check the obsview app's formatting (dotnet format, as CI does)
+	cd app && dotnet format --verify-no-changes
 
 # The chart library is not committed (over the large-file limit). Its URL and
 # hash are read from app/Dockerfile's ADD, so the image and `make app-run`
@@ -51,7 +56,7 @@ app-vendor: ## Fetch the pinned chart library (as app/Dockerfile pins it) into a
 PORT ?= 8000
 app-run: ## Serve the app on PORT (demo data unless app/.env sets WORKSPACE_ID)
 	@test -f app/vendor/echarts.min.js || $(MAKE) app-vendor
-	cd app && APP_PASSCODE=$${APP_PASSCODE:-local} uv run obsview serve --reload --port $(PORT)
+	cd app && APP_PASSCODE=$${APP_PASSCODE:-local} OBSVIEW_ENV_FILE=$(CURDIR)/app/.env VENDOR_DIR=$(CURDIR)/app/vendor PORT=$(PORT) dotnet watch --project src/Obsview run
 
 init: ## terraform init against ENV's backend
 	terraform -chdir=$(TF_DIR) init -reconfigure -backend-config=backends/$(ENV).hcl
